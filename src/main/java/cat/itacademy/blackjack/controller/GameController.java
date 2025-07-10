@@ -1,7 +1,7 @@
 package cat.itacademy.blackjack.controller;
 
 import cat.itacademy.blackjack.dto.PlayerRequest;
-import cat.itacademy.blackjack.model.Game;
+import cat.itacademy.blackjack.model.Games;
 import cat.itacademy.blackjack.service.GameService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,7 +21,7 @@ public class GameController {
 
     @PostMapping("/new")
     @Operation(summary = "Create new game", description = "Creates a new game for a given player.")
-    public Mono<ResponseEntity<Game>> createGame(@RequestBody PlayerRequest request) {
+    public Mono<ResponseEntity<Games>> createGame(@RequestBody PlayerRequest request) {
         return gameService.createGame(request.name())
                 .map(game -> ResponseEntity.status(HttpStatus.CREATED).body(game));
     }

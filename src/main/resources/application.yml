@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: blackjack
+
+  r2dbc:
+    url: r2dbc:mysql://localhost:3306/blackjack
+    username: root
+    password: root
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    org.springframework: INFO

@@ -1,10 +1,10 @@
 package cat.itacademy.blackjack.service;
 
-import cat.itacademy.blackjack.model.Game;
+import cat.itacademy.blackjack.model.Games;
 import cat.itacademy.blackjack.model.GameStatus;
 import cat.itacademy.blackjack.model.Player;
-import cat.itacademy.blackjack.repository.GameRepository;
-import cat.itacademy.blackjack.repository.PlayerRepository;
+import cat.itacademy.blackjack.repository.sql.GameRepository;
+import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -19,7 +19,7 @@ public class GameServiceImpl implements GameService {
     private final GameRepository gameRepository;
 
     @Override
-    public Mono<Game> createGame(String playerName) {
+    public Mono<Games> createGame(String playerName) {
         return playerRepository.findByName(playerName)
                 .switchIfEmpty(playerRepository.save(Player.builder()
                         .name(playerName)
@@ -27,7 +27,7 @@ public class GameServiceImpl implements GameService {
                         .gamesWon(0)
                         .build()))
                 .flatMap(player -> {
-                    Game game = Game.builder()
+                    Games game = Games.builder()
                             .playerId(player.getId())
                             .createdAt(LocalDateTime.now())
                             .status(GameStatus.IN_PROGRESS)
