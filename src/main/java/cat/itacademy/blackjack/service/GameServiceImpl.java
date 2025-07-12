@@ -4,8 +4,7 @@ import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
 import cat.itacademy.blackjack.mapper.GameMapper;
-import cat.itacademy.blackjack.model.GameStatus;
-import cat.itacademy.blackjack.model.Games;
+import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +13,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @RequiredArgsConstructor
 @Service
@@ -22,6 +23,7 @@ public class GameServiceImpl implements GameService {
     private final GameRepository gameRepository;
     private final PlayerRepository playerRepository;
     private final GameMapper gameMapper;
+    private final DeckService deckService;
 
     @Override
     public Mono<GameResponse> createGame(String playerName) {
@@ -71,5 +73,82 @@ public class GameServiceImpl implements GameService {
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
                 .flatMap(gameRepository::delete);
     }
+
+    private TurnResult simulateTurn(DeckService deckService) {
+        List<Card> cards = new ArrayList<>();
+        int score = 0;
+        int aceCount = 0;
+
+        while (score < 17) {
+            Card card = deckService.drawCard();
+            cards.add(card);
+
+            int cardPoints = card.getPoints();
+            score += cardPoints;
+
+            if (card.getValue().equals(CardValue.ACE)) {
+                aceCount++;
+            }
+
+
+            while (score > 21 && aceCount > 0) {
+                score -= 10;
+                aceCount--;
+            }
+        }
+
+        return new TurnResult(score, cards);
+    }
+
+    @Override
+    public Mono<GameResponse> playGame(Long gameId) {
+        if (gameId == null) {
+            return Mono.error(new GameNotFoundException("Game ID must not be null"));
+        }
+
+        return gameRepository.findById(gameId)
+                .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
+                .flatMap(game -> {
+                    if (game.getStatus() != GameStatus.IN_PROGRESS) {
+                        return Mono.just(gameMapper.toResponse(game));
+                    }
+
+                    TurnResult playerTurn = simulateTurn(deckService);
+                    TurnResult dealerTurn = simulateTurn(deckService);
+
+                    int playerScore = playerTurn.score();
+                    int dealerScore = dealerTurn.score();
+
+                    GameStatus result;
+                    if (playerScore > 21) {
+                        result = GameStatus.DEALER_WON;
+                    } else if (dealerScore > 21) {
+                        result = GameStatus.PLAYER_WON;
+                    } else if (playerScore > dealerScore) {
+                        result = GameStatus.PLAYER_WON;
+                    } else if (dealerScore > playerScore) {
+                        result = GameStatus.DEALER_WON;
+                    } else {
+                        result = GameStatus.DRAW;
+                    }
+
+                    game.setPlayerScore(playerScore);
+                    game.setDealerScore(dealerScore);
+                    game.setStatus(result);
+
+                    return gameRepository.save(game)
+                            .map(updatedGame -> new GameResponse(
+                                    updatedGame.getId(),
+                                    updatedGame.getPlayerId(),
+                                    updatedGame.getCreatedAt(),
+                                    updatedGame.getStatus(),
+                                    updatedGame.getPlayerScore(),
+                                    updatedGame.getDealerScore(),
+                                    playerTurn.cards(),
+                                    dealerTurn.cards()
+                            ));
+                });
+    }
+
 }
 

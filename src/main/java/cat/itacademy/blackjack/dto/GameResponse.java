@@ -1,7 +1,9 @@
 package cat.itacademy.blackjack.dto;
 
+import cat.itacademy.blackjack.model.Card;
 import cat.itacademy.blackjack.model.GameStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record GameResponse(
         Long id,
@@ -9,5 +11,7 @@ public record GameResponse(
         LocalDateTime createdAt,
         GameStatus status,
         int playerScore,
-        int dealerScore
+        int dealerScore,
+        List<Card> playerCards,
+        List<Card> dealerCards
 ) {}

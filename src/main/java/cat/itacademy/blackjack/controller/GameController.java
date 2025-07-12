@@ -46,4 +46,15 @@ public class GameController {
     public Flux<GameResponse> getAllGames() {
         return gameService.getAllGames();
     }
+
+    @PostMapping("/{id}/play")
+    @Operation(
+            summary = "Play a round of Blackjack",
+            description = "Simulates a round of Blackjack for the given game ID. Returns the result, scores, and cards played."
+    )
+    public Mono<ResponseEntity<GameResponse>> playGame(@PathVariable("id") Long gameId) {
+        return gameService.playGame(gameId)
+                .map(ResponseEntity::ok);
+    }
+
 }
