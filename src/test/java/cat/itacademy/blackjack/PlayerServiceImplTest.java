@@ -2,6 +2,8 @@ package cat.itacademy.blackjack;
 
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
+import cat.itacademy.blackjack.exception.InvalidPlayerNameException;
+import cat.itacademy.blackjack.exception.PlayerNotFoundException;
 import cat.itacademy.blackjack.mapper.PlayerMapper;
 import cat.itacademy.blackjack.mapper.PlayerMapperImpl;
 import cat.itacademy.blackjack.model.Player;
@@ -88,16 +90,17 @@ class PlayerServiceImplTest {
     }
 
     @Test
-    void findById_shouldReturnEmpty_whenPlayerNotFound() {
-        // Arrange
+    void findById_shouldThrowException_whenPlayerNotFound() {
         String playerId = "not-found";
-        Mockito.when(playerRepository.findById(playerId)).thenReturn(Mono.empty());
+        when(playerRepository.findById(playerId)).thenReturn(Mono.empty());
 
-        // Act & Assert
-        playerService.findById(playerId)
-                .as(StepVerifier::create)
-                .expectComplete()
+        StepVerifier.create(playerService.findById(playerId))
+                .expectErrorMatches(error ->
+                        error instanceof PlayerNotFoundException &&
+                                error.getMessage().equals("Player with id 'not-found' not found."))
                 .verify();
+
+        verify(playerRepository).findById(playerId);
     }
 
     @Test
@@ -170,4 +173,122 @@ class PlayerServiceImplTest {
 
         verify(playerRepository).findAll();
     }
+
+    @Test
+    void deleteById_shouldDeletePlayerIfExists() {
+        // Arrange
+        String playerId = "abc123";
+        Player player = Player.builder()
+                .id(playerId)
+                .name("DeleteTest")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(playerRepository.findById(playerId)).thenReturn(Mono.just(player));
+        when(playerRepository.delete(player)).thenReturn(Mono.empty());
+
+        // Act & Assert
+        StepVerifier.create(playerService.deleteById(playerId))
+                .verifyComplete();
+
+        verify(playerRepository).findById(playerId);
+        verify(playerRepository).delete(player);
+    }
+
+    @Test
+    void registerPlayer_shouldReturnExistingPlayer() {
+        String name = "ExistingPlayer";
+        Player existing = Player.builder()
+                .id("abc123")
+                .name(name)
+                .totalScore(0)
+                .gamesPlayed(0)
+                .gamesWon(0)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(playerRepository.findByName(name)).thenReturn(Mono.just(existing));
+
+        StepVerifier.create(playerService.registerPlayer(name))
+                .expectNextMatches(response ->
+                        response.name().equals(name) &&
+                                response.id().equals("abc123"))
+                .verifyComplete();
+
+        verify(playerRepository).findByName(name);
+        verify(playerRepository, never()).save(any());
+    }
+
+    @Test
+    void registerPlayer_shouldCreateNewPlayerWhenNotExists() {
+        String name = "NewPlayer";
+
+        when(playerRepository.findByName(name)).thenReturn(Mono.empty());
+
+        when(playerRepository.save(any(Player.class)))
+                .thenAnswer(invocation -> {
+                    Player toSave = invocation.getArgument(0);
+                    toSave.setId("new123");
+                    return Mono.just(toSave);
+                });
+
+        StepVerifier.create(playerService.registerPlayer(name))
+                .expectNextMatches(response ->
+                        response.name().equals(name) &&
+                                response.id().equals("new123"))
+                .verifyComplete();
+
+        verify(playerRepository).findByName(name);
+        verify(playerRepository).save(any());
+    }
+
+    @Test
+    void findByName_shouldReturnPlayer_whenExists() {
+        String name = "Alice";
+        Player player = Player.builder()
+                .id("a1")
+                .name(name)
+                .totalScore(42)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(playerRepository.findByName(name)).thenReturn(Mono.just(player));
+
+        StepVerifier.create(playerService.findByName(name))
+                .expectNextMatches(response ->
+                        response.name().equals("Alice") &&
+                                response.totalScore() == 42)
+                .verifyComplete();
+
+        verify(playerRepository).findByName(name);
+    }
+    @Test
+    void findByName_shouldThrowException_whenNotFound() {
+        String name = "Ghost";
+
+        when(playerRepository.findByName(name)).thenReturn(Mono.empty());
+
+        StepVerifier.create(playerService.findByName(name))
+                .expectErrorMatches(error ->
+                        error instanceof PlayerNotFoundException &&
+                                error.getMessage().equals("Player with name 'Ghost' not found."))
+                .verify();
+
+        verify(playerRepository).findByName(name);
+    }
+
+    @Test
+    void registerPlayer_shouldThrowWhenNameIsNull() {
+        StepVerifier.create(playerService.registerPlayer(null))
+                .expectError(InvalidPlayerNameException.class)
+                .verify();
+    }
+
+    @Test
+    void registerPlayer_shouldThrowWhenNameIsEmpty() {
+        StepVerifier.create(playerService.registerPlayer(""))
+                .expectError(InvalidPlayerNameException.class)
+                .verify();
+    }
+
 }

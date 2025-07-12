@@ -5,6 +5,7 @@ import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.service.GameService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +23,7 @@ public class GameController {
 
     @PostMapping("/new")
     @Operation(summary = "Create new game", description = "Creates a new game for a given player.")
-    public Mono<ResponseEntity<GameResponse>> createGame(@RequestBody GameRequest request) {
+    public Mono<ResponseEntity<GameResponse>> createGame(@Valid @RequestBody GameRequest request) {
         return gameService.createGame(request.playerName())
                 .map(game -> ResponseEntity.status(HttpStatus.CREATED).body(game));
     }
@@ -56,5 +57,5 @@ public class GameController {
         return gameService.playGame(gameId)
                 .map(ResponseEntity::ok);
     }
-
 }
+

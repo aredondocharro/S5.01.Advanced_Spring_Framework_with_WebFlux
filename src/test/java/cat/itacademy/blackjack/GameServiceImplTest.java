@@ -9,6 +9,8 @@ import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.DeckService;
 import cat.itacademy.blackjack.service.GameServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -392,44 +394,33 @@ class GameServiceImplTest {
     }
 
     @Test
-    void playGame_shouldSimulateTurnAndReturnResponse_whenDealerBusts() {
-        // Arrange
+    void playGame_shouldSimulateTurnAndReturnResponse_whenDealerBusts() throws JsonProcessingException {
         Long gameId = 1L;
-        Games existingGame = Games.builder()
+        ObjectMapper mapper = new ObjectMapper();
+
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.SIX);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);
+        Card dealerCard3 = new Card(CardSuit.HEARTS, CardValue.NINE);
+
+        List<Card> deck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2, dealerCard3);
+        String deckJson = mapper.writeValueAsString(deck);
+
+        Games game = Games.builder()
                 .id(gameId)
                 .playerId("player-123")
                 .createdAt(LocalDateTime.now())
                 .status(GameStatus.IN_PROGRESS)
                 .playerScore(0)
                 .dealerScore(0)
+                .deckJson(deckJson)
                 .build();
 
-        // Player cards
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);    // 10
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);  // 7 → total 17
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        // Dealer cards
-        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.SIX);     // 6
-        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE); // 9 → total 15
-        Card dealerCard3 = new Card(CardSuit.HEARTS, CardValue.NINE);   // 9 → total 24 (bust)
-
-        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
-
-        when(deckService.drawCard())
-                .thenReturn(playerCard1)
-                .thenReturn(playerCard2)
-                .thenReturn(dealerCard1)
-                .thenReturn(dealerCard2)
-                .thenReturn(dealerCard3);
-
-        when(gameRepository.save(any(Games.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        // Act
-        Mono<GameResponse> result = gameService.playGame(gameId);
-
-        // Assert
-        StepVerifier.create(result)
+        StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
@@ -444,42 +435,32 @@ class GameServiceImplTest {
     }
 
     @Test
-    void playGame_shouldReturnDrawWhenScoresAreEqual() {
-        // Arrange
+    void playGame_shouldReturnDrawWhenScoresAreEqual() throws JsonProcessingException {
         Long gameId = 2L;
-        Games existingGame = Games.builder()
+        ObjectMapper mapper = new ObjectMapper();
+
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.EIGHT);
+
+        List<Card> deck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2);
+        String deckJson = mapper.writeValueAsString(deck);
+
+        Games game = Games.builder()
                 .id(gameId)
                 .playerId("player-456")
                 .createdAt(LocalDateTime.now())
                 .status(GameStatus.IN_PROGRESS)
                 .playerScore(0)
                 .dealerScore(0)
+                .deckJson(deckJson)
                 .build();
 
-        // Player cards: 10 + 7 = 17
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        // Dealer cards: 9 + 8 = 17
-        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
-        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.EIGHT);
-
-        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
-
-        when(deckService.drawCard())
-                .thenReturn(playerCard1)
-                .thenReturn(playerCard2)
-                .thenReturn(dealerCard1)
-                .thenReturn(dealerCard2);
-
-        when(gameRepository.save(any(Games.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        // Act
-        Mono<GameResponse> result = gameService.playGame(gameId);
-
-        // Assert
-        StepVerifier.create(result)
+        StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
@@ -494,51 +475,38 @@ class GameServiceImplTest {
     }
 
     @Test
-    void playGame_shouldReturnDealerWonWhenPlayerBusts() {
-        // Arrange
+    void playGame_shouldReturnDealerWonWhenPlayerBusts() throws JsonProcessingException {
         Long gameId = 3L;
-        Games existingGame = Games.builder()
+        ObjectMapper mapper = new ObjectMapper();
+
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.KING);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.QUEEN);
+        Card playerCard3 = new Card(CardSuit.CLUBS, CardValue.TWO);
+        Card dealerCard1 = new Card(CardSuit.DIAMONDS, CardValue.FIVE);
+        Card dealerCard2 = new Card(CardSuit.SPADES, CardValue.SIX);
+
+        List<Card> deck = List.of(playerCard1, playerCard3, playerCard2, dealerCard1, dealerCard2);
+        String deckJson = mapper.writeValueAsString(deck);
+
+        Games game = Games.builder()
                 .id(gameId)
                 .playerId("player-789")
                 .createdAt(LocalDateTime.now())
                 .status(GameStatus.IN_PROGRESS)
                 .playerScore(0)
                 .dealerScore(0)
+                .deckJson(deckJson)
                 .build();
 
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.KING);     // 10
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.QUEEN);    // 10
-        Card playerCard3 = new Card(CardSuit.CLUBS, CardValue.TWO);       // 2
-
-
-        Card dealerCard1 = new Card(CardSuit.DIAMONDS, CardValue.FIVE);
-        Card dealerCard2 = new Card(CardSuit.SPADES, CardValue.SIX);
-
-        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
-
-
-        when(deckService.drawCard())
-                .thenReturn(playerCard1)
-                .thenReturn(playerCard3)
-                .thenReturn(playerCard2)
-                .thenReturn(dealerCard1)
-                .thenReturn(dealerCard2);
-
-        when(gameRepository.save(any(Games.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        // Act
-        Mono<GameResponse> result = gameService.playGame(gameId);
-
-        // Assert
-        StepVerifier.create(result)
+        StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
                     assertEquals(22, response.playerScore());
                     assertEquals(GameStatus.DEALER_WON, response.status());
                     assertEquals(3, response.playerCards().size());
-                    assertTrue(response.dealerScore() >= 0);
                 })
                 .verifyComplete();
 
@@ -546,43 +514,32 @@ class GameServiceImplTest {
     }
 
     @Test
-    void playGame_shouldReturnDealerWonWhenDealerHasHigherScore() {
-        // Arrange
+    void playGame_shouldReturnDealerWonWhenDealerHasHigherScore() throws JsonProcessingException {
         Long gameId = 4L;
-        Games existingGame = Games.builder()
+        ObjectMapper mapper = new ObjectMapper();
+
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);
+
+        List<Card> deck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2);
+        String deckJson = mapper.writeValueAsString(deck);
+
+        Games game = Games.builder()
                 .id(gameId)
                 .playerId("player-999")
                 .createdAt(LocalDateTime.now())
                 .status(GameStatus.IN_PROGRESS)
                 .playerScore(0)
                 .dealerScore(0)
+                .deckJson(deckJson)
                 .build();
 
-        // Player cards: 10 + 7 = 17 (se planta)
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        // Dealer cards: 9 + 9 = 18 (gana)
-        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
-        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);
-
-        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
-
-        // Roba en este orden: jugador1, jugador2, dealer1, dealer2
-        when(deckService.drawCard())
-                .thenReturn(playerCard1)
-                .thenReturn(playerCard2)
-                .thenReturn(dealerCard1)
-                .thenReturn(dealerCard2);
-
-        when(gameRepository.save(any(Games.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        // Act
-        Mono<GameResponse> result = gameService.playGame(gameId);
-
-        // Assert
-        StepVerifier.create(result)
+        StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
@@ -595,7 +552,5 @@ class GameServiceImplTest {
 
         verify(gameRepository).save(any(Games.class));
     }
-
-
 
 }

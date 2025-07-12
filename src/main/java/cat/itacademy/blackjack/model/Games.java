@@ -17,9 +17,11 @@ public class Games {
     @Id
     private Long id;
 
-    private String playerId; // Referencia a MongoDB
+    private String playerId;
     private LocalDateTime createdAt;
     private GameStatus status;
     private int playerScore;
     private int dealerScore;
+
+    private String deckJson;
 }

@@ -1,13 +1,17 @@
 package cat.itacademy.blackjack.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.UnsupportedMediaTypeStatusException;
 
+import jakarta.validation.ConstraintViolationException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -17,63 +21,74 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+
     @ExceptionHandler({PlayerNotFoundException.class, GameNotFoundException.class})
-    public ResponseEntity<Object> handleCustomExceptions(RuntimeException ex) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", HttpStatus.NOT_FOUND.value());
-        error.put("error", "Not Found");
-        error.put("message", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    public ResponseEntity<Object> handleNotFound(RuntimeException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), exchange);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Object> handleValidationErrors(MethodArgumentNotValidException ex) {
-        List<String> messages = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .map(error -> error.getDefaultMessage() != null ? error.getDefaultMessage() : "Validation error")
-                .collect(Collectors.toList());
-
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", HttpStatus.BAD_REQUEST.value());
-        error.put("error", "Validation Error");
-        error.put("messages", messages);
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
-    }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Object> handleInvalidJson(HttpMessageNotReadableException ex) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", HttpStatus.BAD_REQUEST.value());
-        error.put("error", "Bad Request");
-        error.put("message", "Malformed JSON or invalid request body");
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<Object> handleInvalidJson(HttpMessageNotReadableException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Malformed JSON or invalid request body", exchange);
     }
+
 
     @ExceptionHandler(UnsupportedMediaTypeStatusException.class)
-    public ResponseEntity<Object> handleUnsupportedMediaType(UnsupportedMediaTypeStatusException ex) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", HttpStatus.UNSUPPORTED_MEDIA_TYPE.value());
-        error.put("error", "Unsupported Media Type");
-        error.put("message", "Unsupported Content-Type: " + ex.getMessage());
-
-        return new ResponseEntity<>(error, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    public ResponseEntity<Object> handleUnsupportedMediaType(UnsupportedMediaTypeStatusException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type", "Unsupported Content-Type: " + ex.getMessage(), exchange);
     }
 
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Object> handleValidationErrors(MethodArgumentNotValidException ex, ServerWebExchange exchange) {
+        List<Map<String, String>> errors = ex.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(error -> {
+                    Map<String, String> err = new HashMap<>();
+                    err.put("field", error.getField());
+                    err.put("message", error.getDefaultMessage() != null ? error.getDefaultMessage() : "Validation error");
+                    return err;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", HttpStatus.BAD_REQUEST.value());
+        body.put("error", "Validation Error");
+        body.put("messages", errors);
+        body.put("path", exchange.getRequest().getPath().value());
+
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Object> handleConstraintViolation(ConstraintViolationException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation Error", ex.getMessage(), exchange);
+    }
+
+
+    @ExceptionHandler(InvalidPlayerNameException.class)
+    public ResponseEntity<Object> handleInvalidPlayerName(InvalidPlayerNameException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid player name", ex.getMessage(), exchange);
+    }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleAllExceptions(Exception ex) {
+    public ResponseEntity<Object> handleAllExceptions(Exception ex, ServerWebExchange exchange) {
+        logger.error("Unexpected error occurred", ex);
+        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", exchange);
+    }
+
+    private ResponseEntity<Object> buildErrorResponse(HttpStatus status, String errorTitle, String message, ServerWebExchange exchange) {
         Map<String, Object> error = new HashMap<>();
         error.put("timestamp", LocalDateTime.now());
-        error.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        error.put("error", "Internal Server Error");
-        error.put("message", "An unexpected error occurred");
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+        error.put("status", status.value());
+        error.put("error", errorTitle);
+        error.put("message", message);
+        error.put("path", exchange.getRequest().getPath().value());
+        return new ResponseEntity<>(error, status);
     }
 }
-
-
