@@ -74,31 +74,6 @@ public class GameServiceImpl implements GameService {
                 .flatMap(gameRepository::delete);
     }
 
-    private TurnResult simulateTurn(DeckService deckService) {
-        List<Card> cards = new ArrayList<>();
-        int score = 0;
-        int aceCount = 0;
-
-        while (score < 17) {
-            Card card = deckService.drawCard();
-            cards.add(card);
-
-            int cardPoints = card.getPoints();
-            score += cardPoints;
-
-            if (card.getValue().equals(CardValue.ACE)) {
-                aceCount++;
-            }
-
-
-            while (score > 21 && aceCount > 0) {
-                score -= 10;
-                aceCount--;
-            }
-        }
-
-        return new TurnResult(score, cards);
-    }
 
     @Override
     public Mono<GameResponse> playGame(Long gameId) {
@@ -148,6 +123,24 @@ public class GameServiceImpl implements GameService {
                                     dealerTurn.cards()
                             ));
                 });
+    }
+    private TurnResult simulateTurn(DeckService deckService) {
+        List<Card> cards = new ArrayList<>();
+        int score = 0;
+
+        while (score < 17) {
+            Card card = deckService.drawCard();
+            cards.add(card);
+            score = calculateScore(cards);
+        }
+
+        return new TurnResult(score, cards);
+    }
+
+    private int calculateScore(List<Card> cards) {
+        return cards.stream()
+                .mapToInt(card -> card.getValue().getPoints())
+                .sum();
     }
 
 }

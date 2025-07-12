@@ -4,11 +4,10 @@ import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
 import cat.itacademy.blackjack.mapper.GameMapper;
-import cat.itacademy.blackjack.model.Games;
-import cat.itacademy.blackjack.model.Player;
-import cat.itacademy.blackjack.model.GameStatus;
+import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
+import cat.itacademy.blackjack.service.DeckService;
 import cat.itacademy.blackjack.service.GameServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +19,10 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
+import static com.mongodb.internal.connection.tlschannel.util.Util.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -36,8 +38,12 @@ class GameServiceImplTest {
     @Mock
     private GameMapper gameMapper;
 
+    @Mock
+    private DeckService deckService;
+
     @InjectMocks
     private GameServiceImpl gameService;
+
 
     private final String playerName = "John";
 
@@ -60,7 +66,9 @@ class GameServiceImplTest {
                 newGame.getCreatedAt(),
                 newGame.getStatus(),
                 newGame.getPlayerScore(),
-                newGame.getDealerScore()
+                newGame.getDealerScore(),
+                List.of(),
+                List.of()
         );
 
         when(playerRepository.findByName(playerName)).thenReturn(Mono.just(existingPlayer));
@@ -107,7 +115,9 @@ class GameServiceImplTest {
                 now,
                 GameStatus.IN_PROGRESS,
                 0,
-                0
+                0,
+                List.of(),
+                List.of()
         );
 
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
@@ -175,7 +185,9 @@ class GameServiceImplTest {
                 now,
                 GameStatus.IN_PROGRESS,
                 0,
-                0
+                0,
+                List.of(),
+                List.of()
         );
 
         when(gameRepository.findById(123L)).thenReturn(Mono.just(game));
@@ -255,12 +267,14 @@ class GameServiceImplTest {
 
         GameResponse response1 = new GameResponse(
                 game1.getId(), game1.getPlayerId(), game1.getCreatedAt(),
-                game1.getStatus(), game1.getPlayerScore(), game1.getDealerScore()
+                game1.getStatus(), game1.getPlayerScore(), game1.getDealerScore(),
+                List.of(), List.of()
         );
 
         GameResponse response2 = new GameResponse(
                 game2.getId(), game2.getPlayerId(), game2.getCreatedAt(),
-                game2.getStatus(), game2.getPlayerScore(), game2.getDealerScore()
+                game2.getStatus(), game2.getPlayerScore(), game2.getDealerScore(),
+                List.of(), List.of()
         );
 
         when(gameRepository.findAll()).thenReturn(Flux.just(game1, game2));
@@ -318,7 +332,8 @@ class GameServiceImplTest {
 
         GameResponse response = new GameResponse(
                 game.getId(), game.getPlayerId(), game.getCreatedAt(),
-                game.getStatus(), game.getPlayerScore(), game.getDealerScore()
+                game.getStatus(), game.getPlayerScore(), game.getDealerScore(),
+                List.of(), List.of()
         );
 
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
@@ -356,7 +371,8 @@ class GameServiceImplTest {
 
         GameResponse response = new GameResponse(
                 game.getId(), game.getPlayerId(), game.getCreatedAt(),
-                game.getStatus(), game.getPlayerScore(), game.getDealerScore()
+                game.getStatus(), game.getPlayerScore(), game.getDealerScore(),
+                List.of(), List.of()
         );
 
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
@@ -374,6 +390,212 @@ class GameServiceImplTest {
         verify(gameRepository).save(any(Games.class));
         verify(gameMapper).toResponse(game);
     }
+
+    @Test
+    void playGame_shouldSimulateTurnAndReturnResponse_whenDealerBusts() {
+        // Arrange
+        Long gameId = 1L;
+        Games existingGame = Games.builder()
+                .id(gameId)
+                .playerId("player-123")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(0)
+                .dealerScore(0)
+                .build();
+
+        // Player cards
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);    // 10
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);  // 7 → total 17
+
+        // Dealer cards
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.SIX);     // 6
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE); // 9 → total 15
+        Card dealerCard3 = new Card(CardSuit.HEARTS, CardValue.NINE);   // 9 → total 24 (bust)
+
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
+
+        when(deckService.drawCard())
+                .thenReturn(playerCard1)
+                .thenReturn(playerCard2)
+                .thenReturn(dealerCard1)
+                .thenReturn(dealerCard2)
+                .thenReturn(dealerCard3);
+
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act
+        Mono<GameResponse> result = gameService.playGame(gameId);
+
+        // Assert
+        StepVerifier.create(result)
+                .assertNext(response -> {
+                    assertEquals(gameId, response.id());
+                    assertEquals(17, response.playerScore());
+                    assertEquals(24, response.dealerScore());
+                    assertEquals(GameStatus.PLAYER_WON, response.status());
+                    assertEquals(2, response.playerCards().size());
+                    assertEquals(3, response.dealerCards().size());
+                })
+                .verifyComplete();
+
+        verify(gameRepository).save(any(Games.class));
+    }
+
+    @Test
+    void playGame_shouldReturnDrawWhenScoresAreEqual() {
+        // Arrange
+        Long gameId = 2L;
+        Games existingGame = Games.builder()
+                .id(gameId)
+                .playerId("player-456")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(0)
+                .dealerScore(0)
+                .build();
+
+        // Player cards: 10 + 7 = 17
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+
+        // Dealer cards: 9 + 8 = 17
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.EIGHT);
+
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
+
+        when(deckService.drawCard())
+                .thenReturn(playerCard1)
+                .thenReturn(playerCard2)
+                .thenReturn(dealerCard1)
+                .thenReturn(dealerCard2);
+
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act
+        Mono<GameResponse> result = gameService.playGame(gameId);
+
+        // Assert
+        StepVerifier.create(result)
+                .assertNext(response -> {
+                    assertEquals(gameId, response.id());
+                    assertEquals(17, response.playerScore());
+                    assertEquals(17, response.dealerScore());
+                    assertEquals(GameStatus.DRAW, response.status());
+                    assertEquals(2, response.playerCards().size());
+                    assertEquals(2, response.dealerCards().size());
+                })
+                .verifyComplete();
+
+        verify(gameRepository).save(any(Games.class));
+    }
+
+    @Test
+    void playGame_shouldReturnDealerWonWhenPlayerBusts() {
+        // Arrange
+        Long gameId = 3L;
+        Games existingGame = Games.builder()
+                .id(gameId)
+                .playerId("player-789")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(0)
+                .dealerScore(0)
+                .build();
+
+
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.KING);     // 10
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.QUEEN);    // 10
+        Card playerCard3 = new Card(CardSuit.CLUBS, CardValue.TWO);       // 2
+
+
+        Card dealerCard1 = new Card(CardSuit.DIAMONDS, CardValue.FIVE);
+        Card dealerCard2 = new Card(CardSuit.SPADES, CardValue.SIX);
+
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
+
+
+        when(deckService.drawCard())
+                .thenReturn(playerCard1)
+                .thenReturn(playerCard3)
+                .thenReturn(playerCard2)
+                .thenReturn(dealerCard1)
+                .thenReturn(dealerCard2);
+
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act
+        Mono<GameResponse> result = gameService.playGame(gameId);
+
+        // Assert
+        StepVerifier.create(result)
+                .assertNext(response -> {
+                    assertEquals(gameId, response.id());
+                    assertEquals(22, response.playerScore());
+                    assertEquals(GameStatus.DEALER_WON, response.status());
+                    assertEquals(3, response.playerCards().size());
+                    assertTrue(response.dealerScore() >= 0);
+                })
+                .verifyComplete();
+
+        verify(gameRepository).save(any(Games.class));
+    }
+
+    @Test
+    void playGame_shouldReturnDealerWonWhenDealerHasHigherScore() {
+        // Arrange
+        Long gameId = 4L;
+        Games existingGame = Games.builder()
+                .id(gameId)
+                .playerId("player-999")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(0)
+                .dealerScore(0)
+                .build();
+
+        // Player cards: 10 + 7 = 17 (se planta)
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+
+        // Dealer cards: 9 + 9 = 18 (gana)
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);
+
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(existingGame));
+
+        // Roba en este orden: jugador1, jugador2, dealer1, dealer2
+        when(deckService.drawCard())
+                .thenReturn(playerCard1)
+                .thenReturn(playerCard2)
+                .thenReturn(dealerCard1)
+                .thenReturn(dealerCard2);
+
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // Act
+        Mono<GameResponse> result = gameService.playGame(gameId);
+
+        // Assert
+        StepVerifier.create(result)
+                .assertNext(response -> {
+                    assertEquals(gameId, response.id());
+                    assertEquals(17, response.playerScore());
+                    assertEquals(18, response.dealerScore());
+                    assertEquals(GameStatus.DEALER_WON, response.status());
+                    assertEquals(2, response.playerCards().size());
+                    assertEquals(2, response.dealerCards().size());
+                })
+                .verifyComplete();
+
+        verify(gameRepository).save(any(Games.class));
+    }
+
 
 
 }
