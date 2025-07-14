@@ -2,6 +2,7 @@ package cat.itacademy.blackjack.service;
 
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
+import cat.itacademy.blackjack.exception.InsufficientCardsException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
 import cat.itacademy.blackjack.mapper.CardMapper;
 import cat.itacademy.blackjack.mapper.GameMapper;
@@ -35,6 +36,7 @@ public class GameServiceImpl implements GameService {
     private final GameMapper gameMapper;
     private final DeckService deckService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final CardMapper cardMapper;
 
     @Override
     public Mono<GameResponse> createGame(String playerName) {
@@ -50,6 +52,11 @@ public class GameServiceImpl implements GameService {
                 .flatMap(player -> {
                     // Crear y barajar mazo
                     List<Card> deck = new ArrayList<>(deckService.getShuffledDeck());
+
+
+                    if (deck.size() < 4) {
+                        return Mono.error(new InsufficientCardsException("Not enough cards in the deck to start a game"));
+                    }
 
                     // Repartir cartas
                     List<Card> playerCards = List.of(deck.remove(0), deck.remove(0));
@@ -72,7 +79,6 @@ public class GameServiceImpl implements GameService {
                     // Guardar en la base de datos
                     return gameRepository.save(game)
                             .map(savedGame -> {
-                                // Asignar cartas transitorias solo para la respuesta
                                 savedGame.setPlayerCards(playerCards);
                                 savedGame.setDealerCards(dealerCards);
 
@@ -83,8 +89,8 @@ public class GameServiceImpl implements GameService {
                                         savedGame.getStatus(),
                                         savedGame.getPlayerScore(),
                                         savedGame.getDealerScore(),
-                                        CardMapper.toDtoList(playerCards),
-                                        CardMapper.toDtoList(dealerCards)
+                                        cardMapper.toDtoList(playerCards),
+                                        cardMapper.toDtoList(dealerCards)
                                 );
                             });
                 });
@@ -128,16 +134,31 @@ public class GameServiceImpl implements GameService {
         return gameRepository.findById(gameId)
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
                 .doOnSuccess(game -> logger.debug("Game retrieved: {}", game))
-                .map(gameMapper::toResponse);
+                .flatMap(game -> parseDeckReactive(game.getDeckJson())
+                        .map(deck -> {
+                            List<Card> playerCards = deck.subList(0, 2);
+                            List<Card> dealerCards = deck.subList(2, 4);
+                            return gameMapper.toResponse(game, playerCards, dealerCards);
+                        })
+                );
     }
+
 
     @Override
     public Flux<GameResponse> getAllGames() {
         logger.info("Retrieving all games from repository");
+
         return gameRepository.findAll()
-                .map(gameMapper::toResponse)
+                .flatMap(game -> parseDeckReactive(game.getDeckJson())
+                        .map(deck -> {
+                            List<Card> playerCards = deck.subList(0, 2);
+                            List<Card> dealerCards = deck.subList(2, 4);
+                            return gameMapper.toResponse(game, playerCards, dealerCards);
+                        })
+                )
                 .doOnComplete(() -> logger.info("Completed fetching all games"));
     }
+
 
     @Override
     public Mono<Void> deleteGame(Long gameId) {
@@ -170,11 +191,20 @@ public class GameServiceImpl implements GameService {
                 .flatMap(game -> {
                     if (game.getStatus() != GameStatus.IN_PROGRESS) {
                         logger.info("Game ID {} is already finished. Returning current status.", gameId);
-                        return Mono.just(gameMapper.toResponse(game));
+                        return parseDeckReactive(game.getDeckJson())
+                                .map(deck -> {
+                                    List<Card> playerCards = deck.subList(0, 2);
+                                    List<Card> dealerCards = deck.subList(2, 4);
+                                    return gameMapper.toResponse(game, playerCards, dealerCards);
+                                });
                     }
 
                     return parseDeckReactive(game.getDeckJson())
                             .flatMap(deck -> {
+                                if (deck.size() < 4) {
+                                    return Mono.error(new InsufficientCardsException("Not enough cards left in the deck to continue the game"));
+                                }
+
                                 TurnResult playerTurn = simulateTurn(deck);
                                 TurnResult dealerTurn = simulateTurn(deck);
 
@@ -198,7 +228,7 @@ public class GameServiceImpl implements GameService {
 
                                 String updatedDeckJson;
                                 try {
-                                    updatedDeckJson = objectMapper.writeValueAsString(deck); // mazo actualizado
+                                    updatedDeckJson = objectMapper.writeValueAsString(deck);
                                 } catch (JsonProcessingException e) {
                                     logger.error("Failed to serialize updated deck for game ID: {}", gameId, e);
                                     return Mono.error(new RuntimeException("Failed to update game due to deck serialization error."));
@@ -211,19 +241,15 @@ public class GameServiceImpl implements GameService {
 
                                 return gameRepository.save(game)
                                         .doOnSuccess(updated -> logger.info("Game ID {} updated with result: {}", gameId, result))
-                                        .map(updatedGame -> new GameResponse(
-                                                updatedGame.getId(),
-                                                updatedGame.getPlayerId(),
-                                                updatedGame.getCreatedAt(),
-                                                updatedGame.getStatus(),
-                                                updatedGame.getPlayerScore(),
-                                                updatedGame.getDealerScore(),
-                                                CardMapper.toDtoList(playerTurn.cards()),
-                                                CardMapper.toDtoList(dealerTurn.cards())
+                                        .map(updatedGame -> gameMapper.toResponse(
+                                                updatedGame,
+                                                playerTurn.cards(),
+                                                dealerTurn.cards()
                                         ));
                             });
                 });
     }
+
 
     private TurnResult simulateTurn(List<Card> deck) {
         List<Card> cards = new ArrayList<>();

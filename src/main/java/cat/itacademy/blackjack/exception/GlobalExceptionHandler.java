@@ -91,4 +91,9 @@ public class GlobalExceptionHandler {
         error.put("path", exchange.getRequest().getPath().value());
         return new ResponseEntity<>(error, status);
     }
+
+    @ExceptionHandler(InsufficientCardsException.class)
+    public ResponseEntity<String> handleInsufficientCards(InsufficientCardsException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+    }
 }
