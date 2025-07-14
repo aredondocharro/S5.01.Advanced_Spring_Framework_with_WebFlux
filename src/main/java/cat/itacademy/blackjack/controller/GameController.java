@@ -35,7 +35,7 @@ public class GameController {
                 .map(ResponseEntity::ok);
     }
 
-    @DeleteMapping("/{id}/delete")
+    @DeleteMapping("/{id}")
     @Operation(summary = "Delete a game", description = "Deletes a specific game by its ID.")
     public Mono<ResponseEntity<Void>> deleteGame(@PathVariable("id") Long gameId) {
         return gameService.deleteGame(gameId)

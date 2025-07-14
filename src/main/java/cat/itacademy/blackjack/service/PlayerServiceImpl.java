@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack.service;
 
+import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.exception.InvalidPlayerNameException;
@@ -82,12 +83,28 @@ public class PlayerServiceImpl implements PlayerService {
     }
 
     @Override
-    public Flux<PlayerResponse> getRanking() {
-        logger.info("Retrieving player ranking by total score");
+    public Flux<PlayerRankingResponse> getRanking() {
+        logger.info("Retrieving player ranking by win rate and total score");
+
         return playerRepository.findAll()
-                .sort((a, b) -> Integer.compare(b.getTotalScore(), a.getTotalScore()))
-                .doOnComplete(() -> logger.info("Ranking retrieval completed"))
-                .map(playerMapper::toResponse);
+                .map(player -> {
+                    double winRate = player.getGamesPlayed() == 0 ? 0.0 :
+                            (double) player.getGamesWon() / player.getGamesPlayed();
+
+                    return new PlayerRankingResponse(
+                            player.getName(),
+                            player.getGamesPlayed(),
+                            player.getGamesWon(),
+                            winRate,
+                            player.getTotalScore()
+                    );
+                })
+                .sort((p1, p2) -> {
+                    int byWinRate = Double.compare(p2.winRate(), p1.winRate());
+                    if (byWinRate != 0) return byWinRate;
+                    return Integer.compare(p2.totalScore(), p1.totalScore());
+                })
+                .doOnComplete(() -> logger.info("Ranking retrieval completed"));
     }
 
     @Override

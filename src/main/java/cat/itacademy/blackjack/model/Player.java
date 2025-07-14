@@ -17,7 +17,6 @@ public class Player {
 
     private String name;
     private int totalScore;
-
     private int gamesPlayed;
     private int gamesWon;
 

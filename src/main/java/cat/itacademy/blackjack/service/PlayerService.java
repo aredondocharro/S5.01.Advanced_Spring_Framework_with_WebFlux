@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack.service;
 
+import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import reactor.core.publisher.Flux;
@@ -12,5 +13,5 @@ public interface PlayerService {
     Mono<PlayerResponse> findById(String id);
     Mono<Void> deleteById(String id);
     Flux<PlayerResponse> findAll();
-    Flux<PlayerResponse> getRanking();
+    Flux<PlayerRankingResponse> getRanking();
 }

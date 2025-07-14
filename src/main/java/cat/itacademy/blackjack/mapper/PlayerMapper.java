@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack.mapper;
 
+import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.model.Player;
@@ -7,7 +8,6 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
-import java.time.LocalDateTime;
 
 @Mapper(componentModel = "spring")
 public interface PlayerMapper {
@@ -23,4 +23,17 @@ public interface PlayerMapper {
 
 
     PlayerResponse toResponse(Player player);
+
+    default PlayerRankingResponse toRankingResponse(Player player) {
+        double winRate = player.getGamesPlayed() == 0
+                ? 0.0
+                : (double) player.getGamesWon() / player.getGamesPlayed();
+
+        return new PlayerRankingResponse(
+                player.getName(),
+                player.getGamesPlayed(),
+                player.getGamesWon(),
+                winRate
+        );
+    }
 }

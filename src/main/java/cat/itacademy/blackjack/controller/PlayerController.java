@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack.controller;
 
+import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.service.PlayerService;
@@ -83,5 +84,11 @@ public class PlayerController {
     ) {
         return playerService.deleteById(id)
                 .thenReturn(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/ranking")
+    @Operation(summary = "Player ranking", description = "Returns players ranked by win rate and score")
+    public Flux<PlayerRankingResponse> getRanking() {
+        return playerService.getRanking();
     }
 }
