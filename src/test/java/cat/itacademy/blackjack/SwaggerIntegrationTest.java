@@ -26,7 +26,7 @@ class SwaggerIntegrationTest {
     @Test
     void apiDocsShouldBeAvailable() {
         webTestClient.mutate()
-                .responseTimeout(Duration.ofSeconds(20))
+                .responseTimeout(Duration.ofSeconds(10))
                 .build()
                 .get()
                 .uri("/v3/api-docs")
