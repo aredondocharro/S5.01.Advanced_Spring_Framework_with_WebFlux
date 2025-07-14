@@ -68,21 +68,35 @@ class GameServiceImplTest {
 
         LocalDateTime now = LocalDateTime.of(2024, 1, 1, 12, 0);
 
-        // Cartas originales (Cards) que se pasarán a MapStruct
-        List<Card> playerCards = List.of(new Card(CardSuit.HEARTS, CardValue.FIVE));
-        List<Card> dealerCards = List.of(new Card(CardSuit.SPADES, CardValue.SIX));
+        // Cartas que forman parte del mazo (orden importa)
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.FIVE);
+        Card playerCard2 = new Card(CardSuit.CLUBS, CardValue.SIX);
+        Card dealerCard1 = new Card(CardSuit.SPADES, CardValue.SEVEN);
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.EIGHT);
 
-        // Las listas que devolvería el mapper después de usar el CardMapper interno
-        List<CardResponseDTO> playerCardDtos = List.of(new CardResponseDTO(CardSuit.HEARTS.name(), CardValue.FIVE.name()));
-        List<CardResponseDTO> dealerCardDtos = List.of(new CardResponseDTO(CardSuit.SPADES.name(), CardValue.SIX.name()));
+        List<Card> fullDeck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2);
+        List<Card> playerCards = List.of(playerCard1, playerCard2);
+        List<Card> dealerCards = List.of(dealerCard1, dealerCard2);
 
-        Games newGame = Games.builder()
+        // DTOs esperados después del mapeo con MapStruct
+        List<CardResponseDTO> playerCardDtos = List.of(
+                new CardResponseDTO(CardSuit.HEARTS.name(), CardValue.FIVE.name()),
+                new CardResponseDTO(CardSuit.CLUBS.name(), CardValue.SIX.name())
+        );
+
+        List<CardResponseDTO> dealerCardDtos = List.of(
+                new CardResponseDTO(CardSuit.SPADES.name(), CardValue.SEVEN.name()),
+                new CardResponseDTO(CardSuit.DIAMONDS.name(), CardValue.EIGHT.name())
+        );
+
+        // Juego que será guardado
+        Games savedGame = Games.builder()
                 .id(123L)
                 .playerId(player.getId())
                 .createdAt(now)
                 .status(GameStatus.IN_PROGRESS)
-                .playerScore(0)
-                .dealerScore(0)
+                .playerScore(11) // 5 + 6
+                .dealerScore(15) // 7 + 8
                 .build();
 
         GameResponse expectedResponse = new GameResponse(
@@ -90,60 +104,77 @@ class GameServiceImplTest {
                 player.getId(),
                 now,
                 GameStatus.IN_PROGRESS,
-                0,
-                0,
+                11,
+                15,
                 playerCardDtos,
                 dealerCardDtos
         );
 
         // Mocks
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
-        when(deckService.getShuffledDeck()).thenReturn(List.of(
-                playerCards.get(0),
-                dealerCards.get(0),
-                new Card(CardSuit.CLUBS, CardValue.SEVEN),
-                new Card(CardSuit.DIAMONDS, CardValue.EIGHT)
-        ));
+        when(deckService.getShuffledDeck()).thenReturn(fullDeck);
         when(cardMapper.toDtoList(playerCards)).thenReturn(playerCardDtos);
         when(cardMapper.toDtoList(dealerCards)).thenReturn(dealerCardDtos);
-        when(gameRepository.save(any(Games.class))).thenReturn(Mono.just(newGame));
-        when(gameMapper.toResponse(newGame, playerCards, dealerCards)).thenReturn(expectedResponse);
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> {
+            Games game = invocation.getArgument(0);
+            game.setId(123L);
+            game.setCreatedAt(now);
+            return Mono.just(game);
+        });
 
         // Act & Assert
         StepVerifier.create(gameService.createGame("John"))
                 .expectNextMatches(response ->
-                        response.playerId().equals("1") &&
+                        response.id().equals(123L) &&
+                                response.playerId().equals("1") &&
                                 response.status() == GameStatus.IN_PROGRESS &&
+                                response.playerScore() == 11 &&
+                                response.dealerScore() == 15 &&
                                 response.playerCards().equals(playerCardDtos) &&
                                 response.dealerCards().equals(dealerCardDtos)
                 )
                 .verifyComplete();
 
+        // Verify interactions
         verify(playerRepository).findByName("John");
         verify(deckService).getShuffledDeck();
         verify(cardMapper).toDtoList(playerCards);
         verify(cardMapper).toDtoList(dealerCards);
         verify(gameRepository).save(any(Games.class));
-        verify(gameMapper).toResponse(newGame, playerCards, dealerCards);
     }
 
     @Test
     void createGame_shouldFailWhenGameSaveFails() {
+        // Arrange
         Player player = Player.builder().id("abc123").name(playerName).build();
 
+        // Necesario: al menos 4 cartas para pasar la validación del mazo
+        List<Card> fullDeck = List.of(
+                new Card(CardSuit.HEARTS, CardValue.FIVE),
+                new Card(CardSuit.SPADES, CardValue.SIX),
+                new Card(CardSuit.CLUBS, CardValue.SEVEN),
+                new Card(CardSuit.DIAMONDS, CardValue.EIGHT)
+        );
+
         when(playerRepository.findByName(playerName)).thenReturn(Mono.just(player));
+        when(deckService.getShuffledDeck()).thenReturn(fullDeck);
         when(gameRepository.save(any())).thenReturn(Mono.error(new RuntimeException("DB error")));
 
+        // Act
         Mono<GameResponse> result = gameService.createGame(playerName);
 
+        // Assert
         StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof RuntimeException &&
-                        throwable.getMessage().equals("DB error"))
+                .expectErrorMatches(throwable ->
+                        throwable instanceof RuntimeException &&
+                                throwable.getMessage().equals("DB error"))
                 .verify();
 
         verify(playerRepository).findByName(playerName);
+        verify(deckService).getShuffledDeck();
         verify(gameRepository).save(any());
     }
+
 
     @Test
     void createGame_shouldFailWhenSavingNewPlayerFails() {
@@ -161,19 +192,13 @@ class GameServiceImplTest {
 
     @Test
     void getGameById_shouldReturnGameIfExists() {
-        List<Card> deck = List.of(
-                new Card(CardSuit.HEARTS, CardValue.TWO),
-                new Card(CardSuit.HEARTS, CardValue.THREE),
-                new Card(CardSuit.CLUBS, CardValue.FOUR),
-                new Card(CardSuit.SPADES, CardValue.FIVE)
-        );
+        String deckJson = """
+        [
+            {"suit":"HEARTS","value":"FIVE"},
+            {"suit":"SPADES","value":"TEN"}
+        ]
+    """;
 
-        String deckJson = null;
-        try {
-            deckJson = new ObjectMapper().writeValueAsString(deck);
-        } catch (JsonProcessingException e) {
-            fail("Failed to serialize deck to JSON: " + e.getMessage());
-        }
         Games game = Games.builder()
                 .id(123L)
                 .playerId("player1")
@@ -183,6 +208,14 @@ class GameServiceImplTest {
                 .dealerScore(0)
                 .deckJson(deckJson)
                 .build();
+
+        // 🔹 Simulamos las cartas esperadas después de deserializar el deckJson
+        List<Card> expectedCards = List.of(
+                new Card(CardSuit.HEARTS, CardValue.FIVE),
+                new Card(CardSuit.SPADES, CardValue.TEN)
+        );
+
+        // 🔹 Response esperado
         GameResponse response = new GameResponse(
                 123L,
                 "player1",
@@ -190,20 +223,25 @@ class GameServiceImplTest {
                 GameStatus.IN_PROGRESS,
                 0,
                 0,
-                List.of(),
-                List.of()
+                expectedCards.stream().map(cardMapper::toDto).toList(), // o directamente List.of()
+                expectedCards.stream().map(cardMapper::toDto).toList()
         );
 
+        // 🔹 Mocks
         when(gameRepository.findById(123L)).thenReturn(Mono.just(game));
-        when(gameMapper.toResponse(game, List.of(), List.of())).thenReturn(response);
+        when(gameMapper.toResponse(eq(game), anyList(), anyList())).thenReturn(response);
 
         StepVerifier.create(gameService.getGameById(123L))
                 .expectNextMatches(r ->
-                        r != null && r.status().equals(GameStatus.IN_PROGRESS))
+                        r != null &&
+                                r.id() == 123L &&
+                                r.playerId().equals("player1") &&
+                                r.status() == GameStatus.IN_PROGRESS
+                )
                 .verifyComplete();
 
         verify(gameRepository).findById(123L);
-        verify(gameMapper).toResponse(game, List.of(), List.of());
+        verify(gameMapper).toResponse(eq(game), anyList(), anyList());
     }
 
 

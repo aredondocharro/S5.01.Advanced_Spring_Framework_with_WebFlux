@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -117,10 +119,19 @@ public class GameServiceImpl implements GameService {
     }
 
     private Mono<List<Card>> parseDeckReactive(String deckJson) {
-        return Mono.fromCallable(() ->
-                        objectMapper.readValue(deckJson, new TypeReference<List<Card>>() {})
-                ).subscribeOn(Schedulers.boundedElastic())
-                .doOnError(e -> logger.error("Failed to deserialize deckJson", e));
+        if (deckJson == null || deckJson.isBlank()) {
+            return Mono.just(List.of());
+        }
+
+        return Mono.fromCallable(() -> objectMapper.readValue(deckJson, new TypeReference<List<Card>>() {}));
+    }
+
+    private Tuple2<List<Card>, List<Card>> splitDeck(List<Card> deck) {
+        List<Card> playerCards = deck.size() >= 2 ? deck.subList(0, 2) : new ArrayList<>(deck);
+        List<Card> dealerCards = deck.size() >= 4 ? deck.subList(2, 4) :
+                deck.size() > 2 ? deck.subList(2, deck.size()) : new ArrayList<>();
+
+        return Tuples.of(playerCards, dealerCards);
     }
 
     @Override
@@ -135,11 +146,8 @@ public class GameServiceImpl implements GameService {
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
                 .doOnSuccess(game -> logger.debug("Game retrieved: {}", game))
                 .flatMap(game -> parseDeckReactive(game.getDeckJson())
-                        .map(deck -> {
-                            List<Card> playerCards = deck.subList(0, 2);
-                            List<Card> dealerCards = deck.subList(2, 4);
-                            return gameMapper.toResponse(game, playerCards, dealerCards);
-                        })
+                        .map(this::splitDeck)
+                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()))
                 );
     }
 
@@ -150,11 +158,8 @@ public class GameServiceImpl implements GameService {
 
         return gameRepository.findAll()
                 .flatMap(game -> parseDeckReactive(game.getDeckJson())
-                        .map(deck -> {
-                            List<Card> playerCards = deck.subList(0, 2);
-                            List<Card> dealerCards = deck.subList(2, 4);
-                            return gameMapper.toResponse(game, playerCards, dealerCards);
-                        })
+                        .map(this::splitDeck)
+                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()))
                 )
                 .doOnComplete(() -> logger.info("Completed fetching all games"));
     }
@@ -192,11 +197,8 @@ public class GameServiceImpl implements GameService {
                     if (game.getStatus() != GameStatus.IN_PROGRESS) {
                         logger.info("Game ID {} is already finished. Returning current status.", gameId);
                         return parseDeckReactive(game.getDeckJson())
-                                .map(deck -> {
-                                    List<Card> playerCards = deck.subList(0, 2);
-                                    List<Card> dealerCards = deck.subList(2, 4);
-                                    return gameMapper.toResponse(game, playerCards, dealerCards);
-                                });
+                                .map(this::splitDeck)
+                                .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()));
                     }
 
                     return parseDeckReactive(game.getDeckJson())
