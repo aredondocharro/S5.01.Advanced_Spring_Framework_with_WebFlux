@@ -1,10 +1,12 @@
 package cat.itacademy.blackjack.dto;
 
-import cat.itacademy.blackjack.model.Card;
 import cat.itacademy.blackjack.model.GameStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Schema(description = "Response DTO for a Blackjack game")
 public record GameResponse(
         Long id,
         String playerId,
@@ -12,6 +14,6 @@ public record GameResponse(
         GameStatus status,
         int playerScore,
         int dealerScore,
-        List<Card> playerCards,
-        List<Card> dealerCards
+        List<CardResponseDTO> playerCards,
+        List<CardResponseDTO> dealerCards
 ) {}

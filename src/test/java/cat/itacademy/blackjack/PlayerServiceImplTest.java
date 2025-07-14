@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack;
 
+import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.exception.InvalidPlayerNameException;
@@ -11,7 +12,7 @@ import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.service.PlayerServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
+import static org.assertj.core.api.Assertions.assertThat;
 import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,8 +30,8 @@ class PlayerServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        playerRepository = mock(PlayerRepository.class); // ✅ se mockea solo el repo
-        playerMapper = new PlayerMapperImpl();            // ✅ se usa la implementación real de MapStruct
+        playerRepository = mock(PlayerRepository.class);
+        playerMapper = new PlayerMapperImpl();
         playerService = new PlayerServiceImpl(playerRepository, playerMapper);
     }
 
@@ -162,7 +163,7 @@ class PlayerServiceImplTest {
         when(playerRepository.findAll()).thenReturn(Flux.just(player1, player2, player3));
 
         // Act
-        Flux<PlayerResponse> result = playerService.getRanking();
+        Flux<PlayerRankingResponse> result = playerService.getRanking();
 
         // Assert
         StepVerifier.create(result)
@@ -264,17 +265,19 @@ class PlayerServiceImplTest {
     }
     @Test
     void findByName_shouldThrowException_whenNotFound() {
-        String name = "Ghost";
+        String missingName = "ghost";
 
-        when(playerRepository.findByName(name)).thenReturn(Mono.empty());
+        when(playerRepository.findByName(missingName)).thenReturn(Mono.empty());
 
-        StepVerifier.create(playerService.findByName(name))
-                .expectErrorMatches(error ->
-                        error instanceof PlayerNotFoundException &&
-                                error.getMessage().equals("Player with name 'Ghost' not found."))
+        StepVerifier.create(playerService.findByName(missingName))
+                .expectErrorSatisfies(error -> {
+                    assertThat(error)
+                            .isInstanceOf(PlayerNotFoundException.class)
+                            .hasMessage("Player with name '" + missingName + "' not found.");
+                })
                 .verify();
 
-        verify(playerRepository).findByName(name);
+        verify(playerRepository).findByName(missingName);
     }
 
     @Test

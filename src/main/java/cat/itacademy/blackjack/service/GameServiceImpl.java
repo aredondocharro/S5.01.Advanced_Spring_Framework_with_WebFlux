@@ -3,6 +3,7 @@ package cat.itacademy.blackjack.service;
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
+import cat.itacademy.blackjack.mapper.CardMapper;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
@@ -43,32 +44,59 @@ public class GameServiceImpl implements GameService {
         }
 
         logger.info("Creating game for player: {}", playerName);
+
         return playerRepository.findByName(playerName)
                 .switchIfEmpty(Mono.error(PlayerNotFoundException.forMissingName(playerName)))
                 .flatMap(player -> {
-                    List<Card> deck = generateDeck();
-                    String deckJson;
-                    try {
-                        deckJson = objectMapper.writeValueAsString(deck);
-                    } catch (JsonProcessingException e) {
-                        logger.error("Failed to serialize deck for new game", e);
-                        return Mono.error(new RuntimeException("Failed to create game due to deck serialization error."));
-                    }
+                    // Crear y barajar mazo
+                    List<Card> deck = new ArrayList<>(deckService.getShuffledDeck());
 
+                    // Repartir cartas
+                    List<Card> playerCards = List.of(deck.remove(0), deck.remove(0));
+                    List<Card> dealerCards = List.of(deck.remove(0), deck.remove(0));
+
+                    // Calcular puntuación
+                    int playerScore = calculateScore(playerCards);
+                    int dealerScore = calculateScore(dealerCards);
+
+                    // Crear instancia de Games
                     Games game = Games.builder()
                             .playerId(player.getId())
                             .createdAt(LocalDateTime.now())
                             .status(GameStatus.IN_PROGRESS)
-                            .playerScore(0)
-                            .dealerScore(0)
-                            .deckJson(deckJson) // ← Aquí se asigna
+                            .playerScore(playerScore)
+                            .dealerScore(dealerScore)
+                            .deckJson(serializeDeck(deck)) // persistimos el mazo
                             .build();
 
-                    logger.debug("New game entity prepared: {}", game);
-                    return gameRepository.save(game);
-                })
-                .doOnSuccess(savedGame -> logger.info("Game created with ID: {}", savedGame.getId()))
-                .map(gameMapper::toResponse);
+                    // Guardar en la base de datos
+                    return gameRepository.save(game)
+                            .map(savedGame -> {
+                                // Asignar cartas transitorias solo para la respuesta
+                                savedGame.setPlayerCards(playerCards);
+                                savedGame.setDealerCards(dealerCards);
+
+                                return new GameResponse(
+                                        savedGame.getId(),
+                                        savedGame.getPlayerId(),
+                                        savedGame.getCreatedAt(),
+                                        savedGame.getStatus(),
+                                        savedGame.getPlayerScore(),
+                                        savedGame.getDealerScore(),
+                                        CardMapper.toDtoList(playerCards),
+                                        CardMapper.toDtoList(dealerCards)
+                                );
+                            });
+                });
+    }
+
+    private String serializeDeck(List<Card> deck) {
+        try {
+            return objectMapper.writeValueAsString(deck);
+        } catch (JsonProcessingException e) {
+            logger.error("Error serializing deck", e);
+            throw new RuntimeException("Deck serialization failed", e);
+        }
     }
 
     private List<Card> generateDeck() {
@@ -190,8 +218,8 @@ public class GameServiceImpl implements GameService {
                                                 updatedGame.getStatus(),
                                                 updatedGame.getPlayerScore(),
                                                 updatedGame.getDealerScore(),
-                                                playerTurn.cards(),
-                                                dealerTurn.cards()
+                                                CardMapper.toDtoList(playerTurn.cards()),
+                                                CardMapper.toDtoList(dealerTurn.cards())
                                         ));
                             });
                 });

@@ -39,7 +39,7 @@ public class PlayerServiceImpl implements PlayerService {
     public Mono<PlayerResponse> findByName(String name) {
         logger.debug("Finding player by name: {}", name);
         return playerRepository.findByName(name)
-                .switchIfEmpty(Mono.error(new PlayerNotFoundException(name)))
+                .switchIfEmpty(Mono.error(PlayerNotFoundException.forMissingName(name)))
                 .doOnSuccess(p -> logger.info("Player found: {}", p.getName()))
                 .map(playerMapper::toResponse);
     }
@@ -69,7 +69,7 @@ public class PlayerServiceImpl implements PlayerService {
     public Mono<PlayerResponse> findById(String id) {
         logger.debug("Finding player by ID: {}", id);
         return playerRepository.findById(id)
-                .switchIfEmpty(Mono.error(new PlayerNotFoundException(id)))
+                .switchIfEmpty(Mono.error(PlayerNotFoundException.forMissingId(id)))
                 .doOnSuccess(p -> logger.info("Player found by ID: {}", id))
                 .map(playerMapper::toResponse);
     }

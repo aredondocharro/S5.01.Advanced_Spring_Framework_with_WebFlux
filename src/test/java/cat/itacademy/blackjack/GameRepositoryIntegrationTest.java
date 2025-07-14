@@ -24,7 +24,8 @@ public class GameRepositoryIntegrationTest {
     static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
             .withDatabaseName("blackjack")
             .withUsername("testuser")
-            .withPassword("testpass");
+            .withPassword("testpass")
+            .withInitScript("init.sql");
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {

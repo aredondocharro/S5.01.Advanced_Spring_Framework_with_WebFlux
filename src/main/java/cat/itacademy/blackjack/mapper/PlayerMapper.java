@@ -5,8 +5,9 @@ import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.model.Player;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
+
+import java.time.LocalDateTime;
 
 
 @Mapper(componentModel = "spring")
@@ -14,13 +15,15 @@ public interface PlayerMapper {
 
     PlayerMapper INSTANCE = Mappers.getMapper(PlayerMapper.class);
 
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "gamesPlayed", constant = "0")
-    @Mapping(target = "gamesWon", constant = "0")
-    @Mapping(target = "totalScore", constant = "0")
-    @Mapping(target = "createdAt", expression = "java(LocalDateTime.now())")
-    Player toEntity(PlayerRequest request);
-
+    default Player toEntity(PlayerRequest request) {
+        return Player.builder()
+                .name(request.name())
+                .gamesPlayed(0)
+                .gamesWon(0)
+                .totalScore(0)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
 
     PlayerResponse toResponse(Player player);
 
@@ -33,7 +36,8 @@ public interface PlayerMapper {
                 player.getName(),
                 player.getGamesPlayed(),
                 player.getGamesWon(),
-                winRate
+                winRate,
+                player.getTotalScore()
         );
     }
 }

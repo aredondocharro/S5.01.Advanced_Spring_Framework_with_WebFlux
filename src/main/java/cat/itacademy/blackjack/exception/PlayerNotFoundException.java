@@ -9,7 +9,12 @@ public class PlayerNotFoundException extends RuntimeException {
         return new PlayerNotFoundException("Player with name '" + name + "' not found.");
     }
 
+    public static PlayerNotFoundException forMissingId(String id) {
+        return new PlayerNotFoundException("Player with id '" + id + "' not found.");
+    }
+
     public static PlayerNotFoundException forInvalidInput() {
         return new PlayerNotFoundException("Player name must not be null or empty.");
     }
+
 }
