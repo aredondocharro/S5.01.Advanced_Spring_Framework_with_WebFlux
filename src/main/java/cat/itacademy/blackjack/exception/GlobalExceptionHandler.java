@@ -1,7 +1,10 @@
 package cat.itacademy.blackjack.exception;
 
+import com.mongodb.DuplicateKeyException;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -11,14 +14,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.UnsupportedMediaTypeStatusException;
 
-import jakarta.validation.ConstraintViolationException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Maneja de forma global las excepciones lanzadas por la API,
+ * devolviendo respuestas HTTP con formato consistente y mensajes claros.
+ */
 @RestControllerAdvice
+@Order(1)
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
@@ -76,6 +83,19 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid player name", ex.getMessage(), exchange);
     }
 
+
+    @ExceptionHandler(InsufficientCardsException.class)
+    public ResponseEntity<Object> handleInsufficientCards(InsufficientCardsException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient Cards", ex.getMessage(), exchange);
+    }
+
+
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ResponseEntity<Object> handleDuplicateKey(DuplicateKeyException ex, ServerWebExchange exchange) {
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", "A player with that name already exists.", exchange);
+    }
+
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleAllExceptions(Exception ex, ServerWebExchange exchange) {
         logger.error("Unexpected error occurred", ex);
@@ -91,9 +111,5 @@ public class GlobalExceptionHandler {
         error.put("path", exchange.getRequest().getPath().value());
         return new ResponseEntity<>(error, status);
     }
-
-    @ExceptionHandler(InsufficientCardsException.class)
-    public ResponseEntity<String> handleInsufficientCards(InsufficientCardsException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-    }
 }
+

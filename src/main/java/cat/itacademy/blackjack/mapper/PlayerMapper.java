@@ -13,8 +13,6 @@ import java.time.LocalDateTime;
 @Mapper(componentModel = "spring")
 public interface PlayerMapper {
 
-    PlayerMapper INSTANCE = Mappers.getMapper(PlayerMapper.class);
-
     default Player toEntity(PlayerRequest request) {
         return Player.builder()
                 .name(request.name())

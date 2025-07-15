@@ -1,6 +1,15 @@
 package cat.itacademy.blackjack.exception;
 
+import java.io.Serial;
+
 public class PlayerNotFoundException extends RuntimeException {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    public PlayerNotFoundException() {
+        super();
+    }
+
     public PlayerNotFoundException(String message) {
         super(message);
     }
@@ -16,5 +25,4 @@ public class PlayerNotFoundException extends RuntimeException {
     public static PlayerNotFoundException forInvalidInput() {
         return new PlayerNotFoundException("Player name must not be null or empty.");
     }
-
 }

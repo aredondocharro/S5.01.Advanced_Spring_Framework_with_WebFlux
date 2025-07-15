@@ -11,31 +11,33 @@ import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.DeckService;
 import cat.itacademy.blackjack.service.GameServiceImpl;
+import cat.itacademy.blackjack.service.engine.BlackjackEngine;
 import cat.itacademy.blackjack.service.engine.DeckManager;
 import cat.itacademy.blackjack.service.engine.GameFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 
-import static com.mongodb.internal.connection.tlschannel.util.Util.assertTrue;
 import static org.bson.assertions.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-
 
 
 @ExtendWith(MockitoExtension.class)
@@ -53,8 +55,6 @@ class GameServiceImplTest {
     @Mock
     private DeckService deckService;
 
-    @Mock
-    private CardMapper cardMapper;
 
     @Mock
     private GameFactory gameFactory;
@@ -62,15 +62,16 @@ class GameServiceImplTest {
     @Mock
     private DeckManager deckManager;
 
+    @Mock
+    private BlackjackEngine gameTurnEngine;
+
+    private final CardMapper cardMapper = Mappers.getMapper(CardMapper.class);
     @InjectMocks
     private GameServiceImpl gameService;
 
 
-    private final String playerName = "John";
-
     @Test
     void createGame_shouldCreateGameForNewPlayer() {
-        // Arrange
         Player player = Player.builder()
                 .id("1")
                 .name("John")
@@ -78,35 +79,42 @@ class GameServiceImplTest {
 
         LocalDateTime now = LocalDateTime.of(2024, 1, 1, 12, 0);
 
-        // Cartas que forman parte del mazo (orden importa)
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.FIVE);
-        Card playerCard2 = new Card(CardSuit.CLUBS, CardValue.SIX);
-        Card dealerCard1 = new Card(CardSuit.SPADES, CardValue.SEVEN);
-        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.EIGHT);
+        // Lista mutable para el deck
+        List<Card> fullDeck = new ArrayList<>(List.of(
+                new Card(CardSuit.HEARTS, CardValue.FIVE),
+                new Card(CardSuit.CLUBS, CardValue.SIX),
+                new Card(CardSuit.SPADES, CardValue.SEVEN),
+                new Card(CardSuit.DIAMONDS, CardValue.EIGHT)
+        ));
 
-        List<Card> fullDeck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2);
-        List<Card> playerCards = List.of(playerCard1, playerCard2);
-        List<Card> dealerCards = List.of(dealerCard1, dealerCard2);
+        List<Card> playerCards = List.of(fullDeck.get(0), fullDeck.get(1));
+        List<Card> dealerCards = List.of(fullDeck.get(2), fullDeck.get(3));
 
-        // DTOs esperados después del mapeo con MapStruct
         List<CardResponseDTO> playerCardDtos = List.of(
                 new CardResponseDTO(CardSuit.HEARTS.name(), CardValue.FIVE.name()),
                 new CardResponseDTO(CardSuit.CLUBS.name(), CardValue.SIX.name())
         );
-
         List<CardResponseDTO> dealerCardDtos = List.of(
                 new CardResponseDTO(CardSuit.SPADES.name(), CardValue.SEVEN.name()),
                 new CardResponseDTO(CardSuit.DIAMONDS.name(), CardValue.EIGHT.name())
         );
 
-        // Juego que será guardado
+        Games gameFromFactory = Games.builder()
+                .playerId(player.getId())
+                .createdAt(now)
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(11)
+                .dealerScore(15)
+                .deckJson("[]")
+                .build();
+
         Games savedGame = Games.builder()
                 .id(123L)
                 .playerId(player.getId())
                 .createdAt(now)
                 .status(GameStatus.IN_PROGRESS)
-                .playerScore(11) // 5 + 6
-                .dealerScore(15) // 7 + 8
+                .playerScore(11)
+                .dealerScore(15)
                 .build();
 
         GameResponse expectedResponse = new GameResponse(
@@ -120,69 +128,94 @@ class GameServiceImplTest {
                 dealerCardDtos
         );
 
-        // Mocks
-        when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
-        when(deckService.getShuffledDeck()).thenReturn(fullDeck);
-        when(cardMapper.toDtoList(playerCards)).thenReturn(playerCardDtos);
-        when(cardMapper.toDtoList(dealerCards)).thenReturn(dealerCardDtos);
-        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> {
-            Games game = invocation.getArgument(0);
-            game.setId(123L);
-            game.setCreatedAt(now);
-            return Mono.just(game);
-        });
+        // Mocks: solo lo estrictamente necesario para el service
+        when(playerRepository.findByName("John"))
+                .thenReturn(Mono.just(player));
+        when(deckManager.generateShuffledDeck())
+                .thenReturn(new ArrayList<>(fullDeck));
+        when(gameFactory.createNewGame(
+                eq(player.getId()), eq(playerCards), eq(dealerCards), anyList()))
+                .thenReturn(gameFromFactory);
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> {
+                    Games g = invocation.getArgument(0);
+                    g.setId(123L);
+                    g.setCreatedAt(now);
+                    return Mono.just(g);
+                });
+        // Stub del mapper para devolver la respuesta esperada
+        when(gameMapper.toResponse(any(Games.class), eq(playerCards), eq(dealerCards)))
+                .thenReturn(expectedResponse);
 
-        // Act & Assert
+        // Ejecución y verificación del flujo
         StepVerifier.create(gameService.createGame("John"))
-                .expectNextMatches(response ->
-                        response.id().equals(123L) &&
-                                response.playerId().equals("1") &&
-                                response.status() == GameStatus.IN_PROGRESS &&
-                                response.playerScore() == 11 &&
-                                response.dealerScore() == 15 &&
-                                response.playerCards().equals(playerCardDtos) &&
-                                response.dealerCards().equals(dealerCardDtos)
-                )
+                .expectNext(expectedResponse)
                 .verifyComplete();
 
-        // Verify interactions
+        // Verificaciones de interacciones
         verify(playerRepository).findByName("John");
-        verify(deckService).getShuffledDeck();
-        verify(cardMapper).toDtoList(playerCards);
-        verify(cardMapper).toDtoList(dealerCards);
+        verify(deckManager).generateShuffledDeck();
+        verify(gameFactory).createNewGame(eq(player.getId()), eq(playerCards), eq(dealerCards), anyList());
         verify(gameRepository).save(any(Games.class));
+        verify(gameMapper).toResponse(any(Games.class), eq(playerCards), eq(dealerCards));
     }
+
 
     @Test
     void createGame_shouldFailWhenGameSaveFails() {
         // Arrange
-        Player player = Player.builder().id("abc123").name(playerName).build();
+        String playerName = "John";
+        Player player = Player.builder()
+                .id("abc123")
+                .name(playerName)
+                .build();
 
-        // Necesario: al menos 4 cartas para pasar la validación del mazo
-        List<Card> fullDeck = List.of(
+        // Usamos ArrayList para que remove(0) funcione sin UOE
+        List<Card> fullDeck = new ArrayList<>(List.of(
                 new Card(CardSuit.HEARTS, CardValue.FIVE),
                 new Card(CardSuit.SPADES, CardValue.SIX),
                 new Card(CardSuit.CLUBS, CardValue.SEVEN),
                 new Card(CardSuit.DIAMONDS, CardValue.EIGHT)
-        );
+        ));
 
-        when(playerRepository.findByName(playerName)).thenReturn(Mono.just(player));
-        when(deckService.getShuffledDeck()).thenReturn(fullDeck);
-        when(gameRepository.save(any())).thenReturn(Mono.error(new RuntimeException("DB error")));
+        // Stub del factory para que no devuelva null
+        Games gameFromFactory = Games.builder()
+                .playerId(player.getId())
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(11)    // 5 + 6
+                .dealerScore(15)    // 7 + 8
+                .deckJson("[]")
+                .build();
 
-        // Act
-        Mono<GameResponse> result = gameService.createGame(playerName);
+        when(playerRepository.findByName(playerName))
+                .thenReturn(Mono.just(player));
+        // -> Mocamos deckManager, no deckService
+        when(deckManager.generateShuffledDeck())
+                .thenReturn(new ArrayList<>(fullDeck));
+        when(gameFactory.createNewGame(
+                eq(player.getId()),
+                anyList(), anyList(), anyList()
+        )).thenReturn(gameFromFactory);
+        // Aquí simulamos el error en el save
+        when(gameRepository.save(any(Games.class)))
+                .thenReturn(Mono.error(new RuntimeException("DB error")));
 
-        // Assert
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof RuntimeException &&
-                                throwable.getMessage().equals("DB error"))
+        // Act & Assert
+        StepVerifier.create(gameService.createGame(playerName))
+                .expectErrorMatches(ex ->
+                        ex instanceof RuntimeException &&
+                                ex.getMessage().equals("DB error")
+                )
                 .verify();
 
+        // Verificaciones de interacciones
         verify(playerRepository).findByName(playerName);
-        verify(deckService).getShuffledDeck();
-        verify(gameRepository).save(any());
+        verify(deckManager).generateShuffledDeck();
+        verify(gameFactory).createNewGame(
+                eq(player.getId()), anyList(), anyList(), anyList()
+        );
+        verify(gameRepository).save(any(Games.class));
     }
 
 
@@ -201,14 +234,16 @@ class GameServiceImplTest {
     }
 
     @Test
-    void getGameById_shouldReturnGameIfExists() {
-        String deckJson = """
-        [
-            {"suit":"HEARTS","value":"FIVE"},
-            {"suit":"SPADES","value":"TEN"}
-        ]
-    """;
+    void getGameById_shouldReturnGameIfExists() throws JsonProcessingException {
+        // 🔹 Preparar mazo (deck) y convertir a JSON como se guarda en la base de datos
+        List<Card> fullDeck = List.of(
+                new Card(CardSuit.HEARTS, CardValue.FIVE),
+                new Card(CardSuit.SPADES, CardValue.TEN)
+        );
+        ObjectMapper mapper = new ObjectMapper();
+        String deckJson = mapper.writeValueAsString(fullDeck);
 
+        // 🔹 Crear entidad Games simulando base de datos
         Games game = Games.builder()
                 .id(123L)
                 .playerId("player1")
@@ -219,39 +254,50 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
-        // 🔹 Simulamos las cartas esperadas después de deserializar el deckJson
-        List<Card> expectedCards = List.of(
-                new Card(CardSuit.HEARTS, CardValue.FIVE),
-                new Card(CardSuit.SPADES, CardValue.TEN)
-        );
+        // 🔹 Dividir mazo simulado en cartas del jugador y dealer
+        List<Card> playerCards = List.of(fullDeck.get(0));
+        List<Card> dealerCards = List.of(fullDeck.get(1));
+        Tuple2<List<Card>, List<Card>> deckTuple = Tuples.of(playerCards, dealerCards);
 
-        // 🔹 Response esperado
-        GameResponse response = new GameResponse(
+        // 🔹 DTOs esperados
+        List<CardResponseDTO> playerCardDtos = List.of(new CardResponseDTO("HEARTS", "FIVE"));
+        List<CardResponseDTO> dealerCardDtos = List.of(new CardResponseDTO("SPADES", "TEN"));
+
+        // 🔹 GameResponse esperado
+        GameResponse expectedResponse = new GameResponse(
                 123L,
                 "player1",
                 game.getCreatedAt(),
                 GameStatus.IN_PROGRESS,
                 0,
                 0,
-                expectedCards.stream().map(cardMapper::toDto).toList(), // o directamente List.of()
-                expectedCards.stream().map(cardMapper::toDto).toList()
+                playerCardDtos,
+                dealerCardDtos
         );
 
-        // 🔹 Mocks
+        // 🔹 Configurar mocks
         when(gameRepository.findById(123L)).thenReturn(Mono.just(game));
-        when(gameMapper.toResponse(eq(game), anyList(), anyList())).thenReturn(response);
+        when(deckManager.parseDeckReactive(deckJson)).thenReturn(Mono.just(fullDeck));
+        when(deckManager.splitDeck(any())).thenReturn(deckTuple);
+        when(gameMapper.toResponse(game, playerCards, dealerCards)).thenReturn(expectedResponse);
 
+        // 🔹 Ejecutar prueba
         StepVerifier.create(gameService.getGameById(123L))
-                .expectNextMatches(r ->
-                        r != null &&
-                                r.id() == 123L &&
-                                r.playerId().equals("player1") &&
-                                r.status() == GameStatus.IN_PROGRESS
+                .expectNextMatches(response ->
+                        response != null &&
+                                response.id().equals(123L) &&
+                                response.playerId().equals("player1") &&
+                                response.status() == GameStatus.IN_PROGRESS &&
+                                response.playerCards().equals(playerCardDtos) &&
+                                response.dealerCards().equals(dealerCardDtos)
                 )
                 .verifyComplete();
 
+        // 🔹 Verificaciones de interacción
         verify(gameRepository).findById(123L);
-        verify(gameMapper).toResponse(eq(game), anyList(), anyList());
+        verify(deckManager).parseDeckReactive(deckJson);
+        verify(deckManager).splitDeck(fullDeck);
+        verify(gameMapper).toResponse(game, playerCards, dealerCards);
     }
 
 
@@ -303,8 +349,7 @@ class GameServiceImplTest {
     }
 
     @Test
-    void getAllGames_shouldReturnAllGamesSuccessfully() {
-        // Arrange
+    void getAllGames_shouldReturnAllGamesSuccessfully() throws Exception {
         LocalDateTime createdAt = LocalDateTime.now();
 
         List<Card> deck = List.of(
@@ -314,12 +359,7 @@ class GameServiceImplTest {
                 new Card(CardSuit.SPADES, CardValue.FIVE)
         );
 
-        String deckJson = "";
-        try {
-            deckJson = new ObjectMapper().writeValueAsString(deck);
-        } catch (JsonProcessingException e) {
-            fail("Error serializing deck JSON: " + e.getMessage());
-        }
+        String deckJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(deck);
 
         Games game1 = Games.builder()
                 .id(1L)
@@ -341,7 +381,6 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
-
         List<CardResponseDTO> expectedPlayerCards = deck.subList(0, 2).stream()
                 .map(cardMapper::toDto)
                 .toList();
@@ -351,17 +390,14 @@ class GameServiceImplTest {
                 .toList();
 
         when(gameRepository.findAll()).thenReturn(Flux.just(game1, game2));
-
         when(deckManager.parseDeckReactive(deckJson)).thenReturn(Mono.just(deck));
         when(deckManager.splitDeck(deck)).thenReturn(Tuples.of(deck.subList(0, 2), deck.subList(2, 4)));
 
-        when(gameMapper.toResponse(eq(game1), any(), any()))
+        when(gameMapper.toResponse(eq(game1), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games g = invocation.getArgument(0);
                     List<Card> playerCards = invocation.getArgument(1);
                     List<Card> dealerCards = invocation.getArgument(2);
-
-
                     return new GameResponse(
                             g.getId(), g.getPlayerId(), g.getCreatedAt(), g.getStatus(),
                             g.getPlayerScore(), g.getDealerScore(),
@@ -370,12 +406,11 @@ class GameServiceImplTest {
                     );
                 });
 
-        when(gameMapper.toResponse(eq(game2), any(), any()))
+        when(gameMapper.toResponse(eq(game2), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games g = invocation.getArgument(0);
                     List<Card> playerCards = invocation.getArgument(1);
                     List<Card> dealerCards = invocation.getArgument(2);
-
                     return new GameResponse(
                             g.getId(), g.getPlayerId(), g.getCreatedAt(), g.getStatus(),
                             g.getPlayerScore(), g.getDealerScore(),
@@ -384,7 +419,6 @@ class GameServiceImplTest {
                     );
                 });
 
-        // Act & Assert
         StepVerifier.create(gameService.getAllGames())
                 .assertNext(response -> {
                     assertEquals(1L, response.id());
@@ -408,14 +442,9 @@ class GameServiceImplTest {
 
         verify(gameRepository).findAll();
         verify(deckManager, times(2)).parseDeckReactive(anyString());
-        verify(gameMapper).toResponse(eq(game1), any(), any());
-        verify(gameMapper).toResponse(eq(game2), any(), any());
+        verify(gameMapper).toResponse(eq(game1), anyList(), anyList());
+        verify(gameMapper).toResponse(eq(game2), anyList(), anyList());
     }
-
-
-
-
-
 
 
     @Test
@@ -450,36 +479,32 @@ class GameServiceImplTest {
         // Arrange
         Player player = Player.builder().id("1").name("John").build();
 
-        List<Card> deck = List.of(
+        List<Card> deck = new ArrayList<>(List.of(
                 new Card(CardSuit.HEARTS, CardValue.FIVE),
                 new Card(CardSuit.SPADES, CardValue.SIX),
                 new Card(CardSuit.CLUBS, CardValue.TWO),
                 new Card(CardSuit.DIAMONDS, CardValue.THREE)
-        );
-
-        List<Card> playerCards = deck.subList(0, 2);
-        List<Card> dealerCards = deck.subList(2, 4);
-
-        List<CardResponseDTO> playerCardDtos = List.of(
-                new CardResponseDTO("HEARTS", "FIVE"),
-                new CardResponseDTO("SPADES", "SIX")
-        );
-        List<CardResponseDTO> dealerCardDtos = List.of(
-                new CardResponseDTO("CLUBS", "TWO"),
-                new CardResponseDTO("DIAMONDS", "THREE")
-        );
+        ));
 
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
-        when(deckService.getShuffledDeck()).thenReturn(deck);
-        when(cardMapper.toDtoList(playerCards)).thenReturn(playerCardDtos);
-        when(cardMapper.toDtoList(dealerCards)).thenReturn(dealerCardDtos);
+        when(deckManager.generateShuffledDeck()).thenReturn(new ArrayList<>(deck));
 
+        when(gameFactory.createNewGame(any(), anyList(), anyList(), anyList()))
+                .thenReturn(Games.builder()
+                        .playerId("1")
+                        .createdAt(LocalDateTime.now())
+                        .status(GameStatus.IN_PROGRESS)
+                        .playerScore(11)
+                        .dealerScore(10)
+                        .deckJson("[]")
+                        .build());
         when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> {
             Games g = invocation.getArgument(0);
             g.setId(123L);
             g.setCreatedAt(LocalDateTime.now());
             return Mono.just(g);
         });
+
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games g = invocation.getArgument(0);
@@ -496,54 +521,62 @@ class GameServiceImplTest {
                             dealerDtos
                     );
                 });
+
         // Act & Assert
         StepVerifier.create(gameService.createGame("John"))
                 .assertNext(response -> assertNotNull(response.createdAt()))
                 .verifyComplete();
     }
 
-
-
-
     @Test
     void createGame_shouldCalculateCorrectInitialScores() {
         // Arrange
         Player player = Player.builder().id("1").name("John").build();
 
-        List<Card> deck = List.of(
+        List<Card> deck = new ArrayList<>(List.of(
                 new Card(CardSuit.HEARTS, CardValue.FIVE),     // Player
                 new Card(CardSuit.CLUBS, CardValue.SIX),       // Player
                 new Card(CardSuit.SPADES, CardValue.TEN),      // Dealer
-                new Card(CardSuit.DIAMONDS, CardValue.ACE)     // Dealer
-        );
+                new Card(CardSuit.DIAMONDS, CardValue.ACE),
+                new Card(CardSuit.HEARTS, CardValue.TWO)  // Dealer
+        ));
 
-        List<Card> playerCards = deck.subList(0, 2);  // 5 + 6 = 11
-        List<Card> dealerCards = deck.subList(2, 4);  // 10 + 11 = 21
-
-        List<CardResponseDTO> playerCardDtos = List.of(
-                new CardResponseDTO("HEARTS", "FIVE"),
-                new CardResponseDTO("CLUBS", "SIX")
-        );
-        List<CardResponseDTO> dealerCardDtos = List.of(
-                new CardResponseDTO("SPADES", "TEN"),
-                new CardResponseDTO("DIAMONDS", "ACE")
-        );
+        List<Card> playerCards = List.of(deck.get(0), deck.get(1)); // 5 + 6 = 11
+        List<Card> dealerCards = List.of(deck.get(2), deck.get(3)); // 10 + 11 = 21
 
         when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
-        when(deckService.getShuffledDeck()).thenReturn(deck);
-        when(cardMapper.toDtoList(playerCards)).thenReturn(playerCardDtos);
-        when(cardMapper.toDtoList(dealerCards)).thenReturn(dealerCardDtos);
+        when(deckManager.generateShuffledDeck()).thenReturn(deck);
 
-        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> {
-            Games g = invocation.getArgument(0);
-            g.setId(999L);
-            g.setCreatedAt(LocalDateTime.now());
-            g.setPlayerScore(11);
-            g.setDealerScore(21);
-            return Mono.just(g);
-        });
+        Games expectedGame = Games.builder()
+                .playerId("1")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .playerScore(11)
+                .dealerScore(21)
+                .deckJson("[]")
+                .build();
+        when(gameFactory.createNewGame(eq("1"), eq(playerCards), eq(dealerCards), anyList()))
+                .thenReturn(expectedGame);
 
-        // Act & Assert
+        when(gameRepository.save(expectedGame)).thenAnswer(invocation -> Mono.just(expectedGame));
+
+        when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
+                .thenAnswer(invocation -> {
+                    Games game = invocation.getArgument(0);
+                    List<CardResponseDTO> playerDtos = invocation.getArgument(1);
+                    List<CardResponseDTO> dealerDtos = invocation.getArgument(2);
+                    return new GameResponse(
+                            game.getId(),
+                            game.getPlayerId(),
+                            game.getCreatedAt(),
+                            game.getStatus(),
+                            game.getPlayerScore(),
+                            game.getDealerScore(),
+                            playerDtos,
+                            dealerDtos
+                    );
+                });
+
         StepVerifier.create(gameService.createGame("John"))
                 .assertNext(response -> {
                     assertEquals(11, response.playerScore());
@@ -559,6 +592,7 @@ class GameServiceImplTest {
         Long gameId = 1L;
         ObjectMapper mapper = new ObjectMapper();
 
+        // Cartas reales usadas
         Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
         Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
         Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.SIX);
@@ -585,9 +619,14 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
+        // Mocks
         when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(deckManager.parseDeckReactive(deckJson)).thenReturn(Mono.just(new ArrayList<>(deck)));
         when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
+        when(gameTurnEngine.simulateTurn(anyList()))
+                .thenReturn(new TurnResult(17, List.of(playerCard1, playerCard2)))  // Player
+                .thenReturn(new TurnResult(24, List.of(dealerCard1, dealerCard2, dealerCard3))); // Dealer// dealer
 
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
                 .thenAnswer(invocation -> {
@@ -629,7 +668,6 @@ class GameServiceImplTest {
     }
 
 
-
     @Test
     void playGame_shouldReturnDrawWhenScoresAreEqual() throws JsonProcessingException {
         Long gameId = 2L;
@@ -653,8 +691,14 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
+        // 🔧 Stubbing
         when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(deck));
         when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(gameTurnEngine.simulateTurn(anyList()))
+                .thenReturn(new TurnResult(17, List.of(playerCard1, playerCard2)))  // Player
+                .thenReturn(new TurnResult(17, List.of(dealerCard1, dealerCard2))); // Dealer
+
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games updatedGame = invocation.getArgument(0);
@@ -680,6 +724,8 @@ class GameServiceImplTest {
                             dealerDtos
                     );
                 });
+
+        // ✅ Act & Assert
         StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
@@ -694,16 +740,18 @@ class GameServiceImplTest {
         verify(gameRepository).save(any(Games.class));
     }
 
+
     @Test
     void playGame_shouldReturnDealerWonWhenPlayerBusts() throws JsonProcessingException {
         Long gameId = 3L;
         ObjectMapper mapper = new ObjectMapper();
 
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.KING);
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.QUEEN);
-        Card playerCard3 = new Card(CardSuit.CLUBS, CardValue.TWO);
-        Card dealerCard1 = new Card(CardSuit.DIAMONDS, CardValue.FIVE);
-        Card dealerCard2 = new Card(CardSuit.SPADES, CardValue.SIX);
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.KING);   // 10
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.QUEEN);  // 10
+        Card playerCard3 = new Card(CardSuit.CLUBS, CardValue.TWO);     // 2 → Total = 22
+
+        Card dealerCard1 = new Card(CardSuit.DIAMONDS, CardValue.FIVE); // 5
+        Card dealerCard2 = new Card(CardSuit.SPADES, CardValue.SIX);    // 6 → Total = 11
 
         List<Card> deck = List.of(playerCard1, playerCard3, playerCard2, dealerCard1, dealerCard2);
         String deckJson = mapper.writeValueAsString(deck);
@@ -719,7 +767,14 @@ class GameServiceImplTest {
                 .build();
 
         when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(deck)); // <- ESTO FALTABA
         when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // 🔁 Simulamos turno del jugador (se pasa con 22) y luego del dealer
+        when(gameTurnEngine.simulateTurn(anyList()))
+                .thenReturn(new TurnResult(22, List.of(playerCard1, playerCard2, playerCard3))) // jugador
+                .thenReturn(new TurnResult(11, List.of(dealerCard1, dealerCard2)));             // dealer
+
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games updatedGame = invocation.getArgument(0);
@@ -745,10 +800,12 @@ class GameServiceImplTest {
                             dealerDtos
                     );
                 });
+
+        // Act & Assert
         StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
-                    assertEquals(22, response.playerScore());
+                    assertEquals(22, response.playerScore()); // jugador se pasa
                     assertEquals(GameStatus.DEALER_WON, response.status());
                     assertEquals(3, response.playerCards().size());
                 })
@@ -758,18 +815,23 @@ class GameServiceImplTest {
     }
 
     @Test
-    void playGame_shouldReturnDealerWonWhenDealerHasHigherScore() throws JsonProcessingException {
+    void playGame_shouldReturnDealerWonWhenDealerHasHigherScore() {
         Long gameId = 4L;
         ObjectMapper mapper = new ObjectMapper();
 
-        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);
-        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);
-        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);
-        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);
+        Card playerCard1 = new Card(CardSuit.HEARTS, CardValue.TEN);     // 10
+        Card playerCard2 = new Card(CardSuit.SPADES, CardValue.SEVEN);   // +7 = 17
+        Card dealerCard1 = new Card(CardSuit.CLUBS, CardValue.NINE);     // 9
+        Card dealerCard2 = new Card(CardSuit.DIAMONDS, CardValue.NINE);  // +9 = 18
 
         List<Card> deck = List.of(playerCard1, playerCard2, dealerCard1, dealerCard2);
-        String deckJson = mapper.writeValueAsString(deck);
-
+        String deckJson;
+        try {
+            deckJson = mapper.writeValueAsString(deck);
+        } catch (JsonProcessingException e) {
+            fail("Error serializing deck: " + e.getMessage());
+            return;
+        }
         Games game = Games.builder()
                 .id(gameId)
                 .playerId("player-999")
@@ -780,8 +842,17 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
+        // Mocks adicionales necesarios
         when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
-        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(deck));
+
+        when(gameTurnEngine.simulateTurn(anyList()))
+                .thenReturn(new TurnResult(17, List.of(playerCard1, playerCard2)))  // Player
+                .thenReturn(new TurnResult(18, List.of(dealerCard1, dealerCard2))); // Dealer
+
+        when(gameRepository.save(any(Games.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     Games updatedGame = invocation.getArgument(0);
@@ -807,6 +878,8 @@ class GameServiceImplTest {
                             dealerDtos
                     );
                 });
+
+        // Act & Assert
         StepVerifier.create(gameService.playGame(gameId))
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
@@ -820,5 +893,4 @@ class GameServiceImplTest {
 
         verify(gameRepository).save(any(Games.class));
     }
-
 }

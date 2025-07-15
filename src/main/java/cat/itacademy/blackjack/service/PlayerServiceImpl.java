@@ -45,27 +45,6 @@ public class PlayerServiceImpl implements PlayerService {
     }
 
     @Override
-    public Mono<PlayerResponse> registerPlayer(String name) {
-        if (name == null || name.trim().isEmpty()) {
-            logger.warn("Attempted to register player with null or empty name");
-            return Mono.error(new InvalidPlayerNameException("Player name cannot be null or empty"));
-        }
-
-        return playerRepository.findByName(name)
-                .switchIfEmpty(Mono.defer(() -> {
-                    Player newPlayer = Player.builder()
-                            .name(name)
-                            .totalScore(0)
-                            .gamesPlayed(0)
-                            .gamesWon(0)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                    return playerRepository.save(newPlayer);
-                }))
-                .map(playerMapper::toResponse);
-    }
-
-    @Override
     public Mono<PlayerResponse> findById(String id) {
         logger.debug("Finding player by ID: {}", id);
         return playerRepository.findById(id)

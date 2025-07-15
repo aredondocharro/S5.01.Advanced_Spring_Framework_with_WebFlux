@@ -8,7 +8,6 @@ import reactor.core.publisher.Mono;
 
 public interface PlayerService {
     Mono<PlayerResponse> create(PlayerRequest request);
-    Mono<PlayerResponse> registerPlayer(String name);
     Mono<PlayerResponse> findByName(String name);
     Mono<PlayerResponse> findById(String id);
     Mono<Void> deleteById(String id);

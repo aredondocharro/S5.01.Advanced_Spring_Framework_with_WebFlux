@@ -1,8 +1,9 @@
-package cat.itacademy.blackjack.service.engine;
+package cat.itacademy.blackjack;
 
 import cat.itacademy.blackjack.model.Card;
 import cat.itacademy.blackjack.model.CardSuit;
 import cat.itacademy.blackjack.model.CardValue;
+import cat.itacademy.blackjack.service.engine.DeckManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;

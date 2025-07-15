@@ -41,7 +41,7 @@ public class PlayerController {
             )
             @Valid @RequestBody PlayerRequest request
     ) {
-        return playerService.registerPlayer(request.name())
+        return playerService.create(request)
                 .map(player -> ResponseEntity.status(HttpStatus.CREATED).body(player));
     }
 

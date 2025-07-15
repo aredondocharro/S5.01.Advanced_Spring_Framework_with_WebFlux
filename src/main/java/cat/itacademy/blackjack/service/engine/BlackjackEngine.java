@@ -5,15 +5,20 @@ import cat.itacademy.blackjack.model.GameStatus;
 import cat.itacademy.blackjack.model.TurnResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
+@Component
 public class BlackjackEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(BlackjackEngine.class);
 
     public TurnResult simulateTurn(List<Card> deck) {
+        Objects.requireNonNull(deck, "Deck cannot be null");
+
         List<Card> cards = new ArrayList<>();
         int score = 0;
 
@@ -41,3 +46,4 @@ public class BlackjackEngine {
         return GameStatus.DRAW;
     }
 }
+
