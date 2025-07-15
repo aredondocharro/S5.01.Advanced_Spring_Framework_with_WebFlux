@@ -153,14 +153,30 @@ public class GameServiceImpl implements GameService {
                                 game.setStatus(result);
                                 game.setDeckJson(updatedDeckJson);
 
+                                // Guardar partida y luego actualizar jugador según resultado
                                 return gameRepository.save(game)
-                                        .map(updatedGame -> gameMapper.toResponse(
-                                                updatedGame,
-                                                playerTurn.cards(),
-                                                dealerTurn.cards()
-                                        ));
+                                        .flatMap(updatedGame ->
+                                                playerRepository.findById(updatedGame.getPlayerId())
+                                                        .flatMap(player -> {
+                                                            player.setGamesPlayed(player.getGamesPlayed() + 1);
+
+                                                            // Sumar puntos y victorias solo si gana el jugador
+                                                            if (result == GameStatus.FINISHED_PLAYER_WON) {
+                                                                player.setGamesWon(player.getGamesWon() + 1);
+                                                                player.setTotalScore(player.getTotalScore() + updatedGame.getPlayerScore());
+                                                            }
+
+                                                            return playerRepository.save(player);
+                                                        })
+                                                        .thenReturn(gameMapper.toResponse(
+                                                                updatedGame,
+                                                                playerTurn.cards(),
+                                                                dealerTurn.cards()
+                                                        ))
+                                        );
                             });
                 });
     }
+
 }
 

@@ -375,7 +375,7 @@ class GameServiceImplTest {
                 .id(2L)
                 .playerId("player2")
                 .createdAt(createdAt)
-                .status(GameStatus.FINISHED)
+                .status(GameStatus.FINISHED_DEALER_WON)
                 .playerScore(21)
                 .dealerScore(19)
                 .deckJson(deckJson)
@@ -434,7 +434,7 @@ class GameServiceImplTest {
                     assertEquals("player2", response.playerId());
                     assertEquals(21, response.playerScore());
                     assertEquals(19, response.dealerScore());
-                    assertEquals(GameStatus.FINISHED, response.status());
+                    assertEquals(GameStatus.FINISHED_DEALER_WON, response.status());
                     assertEquals(expectedPlayerCards, response.playerCards());
                     assertEquals(expectedDealerCards, response.dealerCards());
                 })
@@ -660,7 +660,7 @@ class GameServiceImplTest {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
                     assertEquals(24, response.dealerScore());
-                    assertEquals(GameStatus.PLAYER_WON, response.status());
+                    assertEquals(GameStatus.FINISHED_PLAYER_WON, response.status());
                     assertEquals(2, response.playerCards().size());
                     assertEquals(3, response.dealerCards().size());
                 })
@@ -731,7 +731,7 @@ class GameServiceImplTest {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
                     assertEquals(17, response.dealerScore());
-                    assertEquals(GameStatus.DRAW, response.status());
+                    assertEquals(GameStatus.FINISHED_DRAW, response.status());
                     assertEquals(2, response.playerCards().size());
                     assertEquals(2, response.dealerCards().size());
                 })
@@ -806,7 +806,7 @@ class GameServiceImplTest {
                 .assertNext(response -> {
                     assertEquals(gameId, response.id());
                     assertEquals(22, response.playerScore()); // jugador se pasa
-                    assertEquals(GameStatus.DEALER_WON, response.status());
+                    assertEquals(GameStatus.FINISHED_DEALER_WON, response.status());
                     assertEquals(3, response.playerCards().size());
                 })
                 .verifyComplete();
@@ -885,7 +885,7 @@ class GameServiceImplTest {
                     assertEquals(gameId, response.id());
                     assertEquals(17, response.playerScore());
                     assertEquals(18, response.dealerScore());
-                    assertEquals(GameStatus.DEALER_WON, response.status());
+                    assertEquals(GameStatus.FINISHED_DEALER_WON, response.status());
                     assertEquals(2, response.playerCards().size());
                     assertEquals(2, response.dealerCards().size());
                 })
@@ -893,4 +893,69 @@ class GameServiceImplTest {
 
         verify(gameRepository).save(any(Games.class));
     }
+    @Test
+    void playGame_playerWins_updatesPlayerAndGame() {
+        Long gameId = 1L;
+        String playerId = "player1";
+
+        List<Card> deck = new ArrayList<>();
+        deck.add(new Card(CardSuit.HEARTS, CardValue.TEN));
+        deck.add(new Card(CardSuit.SPADES, CardValue.SIX));
+        deck.add(new Card(CardSuit.CLUBS, CardValue.TWO));
+        deck.add(new Card(CardSuit.DIAMONDS, CardValue.FOUR));
+
+        String deckJson = "mockedDeckJson";
+
+        Games game = Games.builder()
+                .id(gameId)
+                .playerId(playerId)
+                .status(GameStatus.IN_PROGRESS)
+                .deckJson(deckJson)
+                .playerScore(0)
+                .dealerScore(0)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Player player = Player.builder()
+                .id(playerId)
+                .name("Player One")
+                .gamesPlayed(0)
+                .gamesWon(0)
+                .totalScore(0)
+                .build();
+
+        TurnResult playerTurn = new TurnResult(20, List.of(new Card(CardSuit.HEARTS, CardValue.TEN), new Card(CardSuit.SPADES, CardValue.TEN)));
+        TurnResult dealerTurn = new TurnResult(18, List.of(new Card(CardSuit.CLUBS, CardValue.EIGHT), new Card(CardSuit.DIAMONDS, CardValue.TEN)));
+
+        GameStatus resultStatus = GameStatus.FINISHED_PLAYER_WON;
+
+        GameResponse expectedResponse = new GameResponse(
+                gameId, playerId, game.getCreatedAt(), resultStatus,
+                playerTurn.score(), dealerTurn.score(),
+                playerTurn.cards().stream().map(card -> new cat.itacademy.blackjack.dto.CardResponseDTO(card.getSuit().name(), card.getValue().name())).toList(),
+                dealerTurn.cards().stream().map(card -> new cat.itacademy.blackjack.dto.CardResponseDTO(card.getSuit().name(), card.getValue().name())).toList()
+        );
+
+        when(gameRepository.findById(gameId)).thenReturn(Mono.just(game));
+        when(deckManager.parseDeckReactive(deckJson)).thenReturn(Mono.just(deck));
+        when(gameTurnEngine.simulateTurn(deck)).thenReturn(playerTurn, dealerTurn);
+        when(gameTurnEngine.determineWinner(playerTurn.score(), dealerTurn.score())).thenReturn(resultStatus);
+        when(deckManager.serializeDeck(deck)).thenReturn("updatedDeckJson");
+        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(playerRepository.findById(playerId)).thenReturn(Mono.just(player));
+        when(playerRepository.save(any(Player.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(gameMapper.toResponse(any(Games.class), anyList(), anyList())).thenReturn(expectedResponse);
+
+        StepVerifier.create(gameService.playGame(gameId))
+                .expectNextMatches(response -> response.status() == GameStatus.FINISHED_PLAYER_WON &&
+                        response.playerScore() == 20 &&
+                        response.dealerScore() == 18 &&
+                        response.playerCards().size() == 2 &&
+                        response.dealerCards().size() == 2)
+                .verifyComplete();
+
+        verify(gameRepository).save(argThat(g -> g.getStatus() == GameStatus.FINISHED_PLAYER_WON));
+        verify(playerRepository).save(argThat(p -> p.getGamesPlayed() == 1 && p.getGamesWon() == 1 && p.getTotalScore() == 20));
+    }
+
 }

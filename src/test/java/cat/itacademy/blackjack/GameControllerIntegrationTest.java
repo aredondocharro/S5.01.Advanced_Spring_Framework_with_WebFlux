@@ -9,7 +9,6 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -86,10 +85,9 @@ class GameControllerIT {
 
         assertNotNull(afterPlay);
         assertTrue(
-                afterPlay.status() == GameStatus.PLAYER_WON ||
-                        afterPlay.status() == GameStatus.DEALER_WON  ||
-                        afterPlay.status() == GameStatus.FINISHED    ||
-                        afterPlay.status() == GameStatus.DRAW
+                afterPlay.status() == GameStatus.FINISHED_PLAYER_WON ||
+                        afterPlay.status() == GameStatus.FINISHED_DEALER_WON ||
+                        afterPlay.status() == GameStatus.FINISHED_DRAW
         );
     }
 }

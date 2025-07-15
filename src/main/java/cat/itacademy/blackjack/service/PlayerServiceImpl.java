@@ -4,10 +4,12 @@ import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.exception.InvalidPlayerNameException;
+import cat.itacademy.blackjack.exception.PlayerAlreadyExistsException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
 import cat.itacademy.blackjack.mapper.PlayerMapper;
 import cat.itacademy.blackjack.model.Player;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
+import com.mongodb.DuplicateKeyException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,12 +30,20 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public Mono<PlayerResponse> create(PlayerRequest request) {
-        logger.info("Creating player from request: {}", request.name());
-        Player player = playerMapper.toEntity(request);
-        return playerRepository.save(player)
-                .doOnSuccess(p -> logger.info("Player created with ID: {}", p.getId()))
-                .map(playerMapper::toResponse);
+        String name = request.name();
+        if (name == null || name.trim().isEmpty()) {
+            return Mono.error(new InvalidPlayerNameException("Player name cannot be null or empty"));
+        }
+
+        return playerRepository.findByName(name)
+                .flatMap(existing -> Mono.<PlayerResponse>error(new PlayerAlreadyExistsException("Player with that name already exists.")))
+                .switchIfEmpty(Mono.defer(() -> {
+                    Player player = playerMapper.toEntity(request);
+                    return playerRepository.save(player)
+                            .map(playerMapper::toResponse);
+                }));
     }
+
 
     @Override
     public Mono<PlayerResponse> findByName(String name) {

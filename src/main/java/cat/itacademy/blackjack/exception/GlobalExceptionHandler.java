@@ -101,6 +101,15 @@ public class GlobalExceptionHandler {
         logger.error("Unexpected error occurred", ex);
         return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", exchange);
     }
+    @ExceptionHandler(PlayerAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handlePlayerAlreadyExists(PlayerAlreadyExistsException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.CONFLICT.value(),
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
 
     private ResponseEntity<Object> buildErrorResponse(HttpStatus status, String errorTitle, String message, ServerWebExchange exchange) {
         Map<String, Object> error = new HashMap<>();

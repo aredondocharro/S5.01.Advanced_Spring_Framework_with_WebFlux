@@ -39,11 +39,11 @@ public class BlackjackEngine {
     }
 
     public GameStatus determineWinner(int playerScore, int dealerScore) {
-        if (playerScore > 21) return GameStatus.DEALER_WON;
-        if (dealerScore > 21) return GameStatus.PLAYER_WON;
-        if (playerScore > dealerScore) return GameStatus.PLAYER_WON;
-        if (dealerScore > playerScore) return GameStatus.DEALER_WON;
-        return GameStatus.DRAW;
+        if (playerScore > 21) return GameStatus.FINISHED_DEALER_WON;
+        if (dealerScore > 21) return GameStatus.FINISHED_PLAYER_WON;
+        if (playerScore > dealerScore) return GameStatus.FINISHED_PLAYER_WON;
+        if (dealerScore > playerScore) return GameStatus.FINISHED_DEALER_WON;
+        return GameStatus.FINISHED_DRAW;
     }
 }
 
