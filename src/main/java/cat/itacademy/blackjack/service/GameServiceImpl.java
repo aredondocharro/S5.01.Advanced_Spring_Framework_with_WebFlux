@@ -9,22 +9,16 @@ import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import cat.itacademy.blackjack.service.engine.DeckManager;
+import cat.itacademy.blackjack.service.engine.GameFactory;
+import cat.itacademy.blackjack.service.engine.GameTurnEngine;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import reactor.util.function.Tuple2;
-import reactor.util.function.Tuples;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -36,9 +30,10 @@ public class GameServiceImpl implements GameService {
     private final GameRepository gameRepository;
     private final PlayerRepository playerRepository;
     private final GameMapper gameMapper;
-    private final DeckService deckService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final CardMapper cardMapper;
+    private final DeckManager deckManager;
+    private final GameFactory gameFactory;
+    private final GameTurnEngine gameTurnEngine;
 
     @Override
     public Mono<GameResponse> createGame(String playerName) {
@@ -52,86 +47,24 @@ public class GameServiceImpl implements GameService {
         return playerRepository.findByName(playerName)
                 .switchIfEmpty(Mono.error(PlayerNotFoundException.forMissingName(playerName)))
                 .flatMap(player -> {
-                    // Crear y barajar mazo
-                    List<Card> deck = new ArrayList<>(deckService.getShuffledDeck());
-
+                    List<Card> deck = deckManager.generateShuffledDeck();
 
                     if (deck.size() < 4) {
                         return Mono.error(new InsufficientCardsException("Not enough cards in the deck to start a game"));
                     }
 
-                    // Repartir cartas
                     List<Card> playerCards = List.of(deck.remove(0), deck.remove(0));
                     List<Card> dealerCards = List.of(deck.remove(0), deck.remove(0));
 
-                    // Calcular puntuación
-                    int playerScore = calculateScore(playerCards);
-                    int dealerScore = calculateScore(dealerCards);
+                    Games game = gameFactory.createNewGame(player.getId(), playerCards, dealerCards, deck);
 
-                    // Crear instancia de Games
-                    Games game = Games.builder()
-                            .playerId(player.getId())
-                            .createdAt(LocalDateTime.now())
-                            .status(GameStatus.IN_PROGRESS)
-                            .playerScore(playerScore)
-                            .dealerScore(dealerScore)
-                            .deckJson(serializeDeck(deck)) // persistimos el mazo
-                            .build();
-
-                    // Guardar en la base de datos
                     return gameRepository.save(game)
                             .map(savedGame -> {
                                 savedGame.setPlayerCards(playerCards);
                                 savedGame.setDealerCards(dealerCards);
-
-                                return new GameResponse(
-                                        savedGame.getId(),
-                                        savedGame.getPlayerId(),
-                                        savedGame.getCreatedAt(),
-                                        savedGame.getStatus(),
-                                        savedGame.getPlayerScore(),
-                                        savedGame.getDealerScore(),
-                                        cardMapper.toDtoList(playerCards),
-                                        cardMapper.toDtoList(dealerCards)
-                                );
+                                return gameMapper.toResponse(savedGame, playerCards, dealerCards);
                             });
                 });
-    }
-
-    private String serializeDeck(List<Card> deck) {
-        try {
-            return objectMapper.writeValueAsString(deck);
-        } catch (JsonProcessingException e) {
-            logger.error("Error serializing deck", e);
-            throw new RuntimeException("Deck serialization failed", e);
-        }
-    }
-
-    private List<Card> generateDeck() {
-        List<Card> deck = new ArrayList<>();
-        for (CardSuit suit : CardSuit.values()) {
-            for (CardValue value : CardValue.values()) {
-                deck.add(Card.builder().suit(suit).value(value).build());
-            }
-        }
-        Collections.shuffle(deck);
-        return deck;
-    }
-
-    private Mono<List<Card>> parseDeckReactive(String deckJson) {
-        if (deckJson == null || deckJson.isBlank()) {
-            return Mono.just(List.of());
-        }
-
-        return Mono.fromCallable(() -> objectMapper.readValue(deckJson, new TypeReference<List<Card>>() {}));
-    }
-
-    private Tuple2<List<Card>, List<Card>> splitDeck(List<Card> deck) {
-        List<Card> playerCards = deck.size() >= 2 ? deck.subList(0, 2) : new ArrayList<>(deck);
-        List<Card> dealerCards = deck.size() >= 4 ? deck.subList(2, 4) :
-                deck.size() > 2 ? deck.subList(2, deck.size()) : new ArrayList<>();
-
-        return Tuples.of(playerCards, dealerCards);
     }
 
     @Override
@@ -144,26 +77,21 @@ public class GameServiceImpl implements GameService {
         logger.info("Fetching game with ID: {}", gameId);
         return gameRepository.findById(gameId)
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
-                .doOnSuccess(game -> logger.debug("Game retrieved: {}", game))
-                .flatMap(game -> parseDeckReactive(game.getDeckJson())
-                        .map(this::splitDeck)
-                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()))
-                );
+                .flatMap(game -> deckManager.parseDeckReactive(game.getDeckJson())
+                        .map(deckManager::splitDeck)
+                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2())));
     }
-
 
     @Override
     public Flux<GameResponse> getAllGames() {
         logger.info("Retrieving all games from repository");
 
         return gameRepository.findAll()
-                .flatMap(game -> parseDeckReactive(game.getDeckJson())
-                        .map(this::splitDeck)
-                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()))
-                )
+                .flatMap(game -> deckManager.parseDeckReactive(game.getDeckJson())
+                        .map(deckManager::splitDeck)
+                        .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2())))
                 .doOnComplete(() -> logger.info("Completed fetching all games"));
     }
-
 
     @Override
     public Mono<Void> deleteGame(Long gameId) {
@@ -175,11 +103,8 @@ public class GameServiceImpl implements GameService {
         logger.info("Deleting game with ID: {}", gameId);
         return gameRepository.findById(gameId)
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
-                .flatMap(game -> {
-                    logger.debug("Game found for deletion: {}", game);
-                    return gameRepository.delete(game)
-                            .doOnSuccess(v -> logger.info("Game deleted: {}", gameId));
-                });
+                .flatMap(game -> gameRepository.delete(game)
+                        .doOnSuccess(v -> logger.info("Game deleted: {}", gameId)));
     }
 
     @Override
@@ -195,54 +120,41 @@ public class GameServiceImpl implements GameService {
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
                 .flatMap(game -> {
                     if (game.getStatus() != GameStatus.IN_PROGRESS) {
-                        logger.info("Game ID {} is already finished. Returning current status.", gameId);
-                        return parseDeckReactive(game.getDeckJson())
-                                .map(this::splitDeck)
+                        return deckManager.parseDeckReactive(game.getDeckJson())
+                                .map(deckManager::splitDeck)
                                 .map(tuple -> gameMapper.toResponse(game, tuple.getT1(), tuple.getT2()));
                     }
 
-                    return parseDeckReactive(game.getDeckJson())
+                    return deckManager.parseDeckReactive(game.getDeckJson())
                             .flatMap(deck -> {
                                 if (deck.size() < 4) {
                                     return Mono.error(new InsufficientCardsException("Not enough cards left in the deck to continue the game"));
                                 }
 
-                                TurnResult playerTurn = simulateTurn(deck);
-                                TurnResult dealerTurn = simulateTurn(deck);
-
-                                int playerScore = playerTurn.score();
-                                int dealerScore = dealerTurn.score();
-
-                                logger.debug("Player score: {}, Dealer score: {}", playerScore, dealerScore);
+                                TurnResult playerTurn = gameTurnEngine.simulateTurn(deck);
+                                TurnResult dealerTurn = gameTurnEngine.simulateTurn(deck);
 
                                 GameStatus result;
-                                if (playerScore > 21) {
+                                if (playerTurn.score() > 21) {
                                     result = GameStatus.DEALER_WON;
-                                } else if (dealerScore > 21) {
+                                } else if (dealerTurn.score() > 21) {
                                     result = GameStatus.PLAYER_WON;
-                                } else if (playerScore > dealerScore) {
+                                } else if (playerTurn.score() > dealerTurn.score()) {
                                     result = GameStatus.PLAYER_WON;
-                                } else if (dealerScore > playerScore) {
+                                } else if (dealerTurn.score() > playerTurn.score()) {
                                     result = GameStatus.DEALER_WON;
                                 } else {
                                     result = GameStatus.DRAW;
                                 }
 
-                                String updatedDeckJson;
-                                try {
-                                    updatedDeckJson = objectMapper.writeValueAsString(deck);
-                                } catch (JsonProcessingException e) {
-                                    logger.error("Failed to serialize updated deck for game ID: {}", gameId, e);
-                                    return Mono.error(new RuntimeException("Failed to update game due to deck serialization error."));
-                                }
+                                String updatedDeckJson = deckManager.serializeDeck(deck);
 
-                                game.setPlayerScore(playerScore);
-                                game.setDealerScore(dealerScore);
+                                game.setPlayerScore(playerTurn.score());
+                                game.setDealerScore(dealerTurn.score());
                                 game.setStatus(result);
                                 game.setDeckJson(updatedDeckJson);
 
                                 return gameRepository.save(game)
-                                        .doOnSuccess(updated -> logger.info("Game ID {} updated with result: {}", gameId, result))
                                         .map(updatedGame -> gameMapper.toResponse(
                                                 updatedGame,
                                                 playerTurn.cards(),
@@ -251,27 +163,5 @@ public class GameServiceImpl implements GameService {
                             });
                 });
     }
-
-
-    private TurnResult simulateTurn(List<Card> deck) {
-        List<Card> cards = new ArrayList<>();
-        int score = 0;
-
-        while (score < 17 && !deck.isEmpty()) {
-            Card card = deck.remove(0);
-            cards.add(card);
-            score = calculateScore(cards);
-        }
-
-        logger.debug("Turn simulated. Cards: {}, Score: {}", cards, score);
-        return new TurnResult(score, cards);
-    }
-
-    private int calculateScore(List<Card> cards) {
-        return cards.stream()
-                .mapToInt(card -> card.getValue().getPoints())
-                .sum();
-    }
 }
-
 

@@ -11,6 +11,8 @@ import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.DeckService;
 import cat.itacademy.blackjack.service.GameServiceImpl;
+import cat.itacademy.blackjack.service.engine.DeckManager;
+import cat.itacademy.blackjack.service.engine.GameFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import reactor.util.function.Tuples;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -51,6 +55,12 @@ class GameServiceImplTest {
 
     @Mock
     private CardMapper cardMapper;
+
+    @Mock
+    private GameFactory gameFactory;
+
+    @Mock
+    private DeckManager deckManager;
 
     @InjectMocks
     private GameServiceImpl gameService;
@@ -331,7 +341,7 @@ class GameServiceImplTest {
                 .deckJson(deckJson)
                 .build();
 
-        // Convert to DTOs
+
         List<CardResponseDTO> expectedPlayerCards = deck.subList(0, 2).stream()
                 .map(cardMapper::toDto)
                 .toList();
@@ -342,29 +352,37 @@ class GameServiceImplTest {
 
         when(gameRepository.findAll()).thenReturn(Flux.just(game1, game2));
 
+        when(deckManager.parseDeckReactive(deckJson)).thenReturn(Mono.just(deck));
+        when(deckManager.splitDeck(deck)).thenReturn(Tuples.of(deck.subList(0, 2), deck.subList(2, 4)));
+
         when(gameMapper.toResponse(eq(game1), any(), any()))
-                .thenReturn(new GameResponse(
-                        game1.getId(),
-                        game1.getPlayerId(),
-                        game1.getCreatedAt(),
-                        game1.getStatus(),
-                        game1.getPlayerScore(),
-                        game1.getDealerScore(),
-                        expectedPlayerCards,
-                        expectedDealerCards
-                ));
+                .thenAnswer(invocation -> {
+                    Games g = invocation.getArgument(0);
+                    List<Card> playerCards = invocation.getArgument(1);
+                    List<Card> dealerCards = invocation.getArgument(2);
+
+
+                    return new GameResponse(
+                            g.getId(), g.getPlayerId(), g.getCreatedAt(), g.getStatus(),
+                            g.getPlayerScore(), g.getDealerScore(),
+                            playerCards.stream().map(cardMapper::toDto).toList(),
+                            dealerCards.stream().map(cardMapper::toDto).toList()
+                    );
+                });
 
         when(gameMapper.toResponse(eq(game2), any(), any()))
-                .thenReturn(new GameResponse(
-                        game2.getId(),
-                        game2.getPlayerId(),
-                        game2.getCreatedAt(),
-                        game2.getStatus(),
-                        game2.getPlayerScore(),
-                        game2.getDealerScore(),
-                        expectedPlayerCards,
-                        expectedDealerCards
-                ));
+                .thenAnswer(invocation -> {
+                    Games g = invocation.getArgument(0);
+                    List<Card> playerCards = invocation.getArgument(1);
+                    List<Card> dealerCards = invocation.getArgument(2);
+
+                    return new GameResponse(
+                            g.getId(), g.getPlayerId(), g.getCreatedAt(), g.getStatus(),
+                            g.getPlayerScore(), g.getDealerScore(),
+                            playerCards.stream().map(cardMapper::toDto).toList(),
+                            dealerCards.stream().map(cardMapper::toDto).toList()
+                    );
+                });
 
         // Act & Assert
         StepVerifier.create(gameService.getAllGames())
@@ -389,9 +407,12 @@ class GameServiceImplTest {
                 .verifyComplete();
 
         verify(gameRepository).findAll();
+        verify(deckManager, times(2)).parseDeckReactive(anyString());
         verify(gameMapper).toResponse(eq(game1), any(), any());
         verify(gameMapper).toResponse(eq(game2), any(), any());
     }
+
+
 
 
 
@@ -459,7 +480,22 @@ class GameServiceImplTest {
             g.setCreatedAt(LocalDateTime.now());
             return Mono.just(g);
         });
-
+        when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
+                .thenAnswer(invocation -> {
+                    Games g = invocation.getArgument(0);
+                    List<CardResponseDTO> playerDtos = invocation.getArgument(1);
+                    List<CardResponseDTO> dealerDtos = invocation.getArgument(2);
+                    return new GameResponse(
+                            g.getId(),
+                            g.getPlayerId(),
+                            g.getCreatedAt(),
+                            g.getStatus(),
+                            g.getPlayerScore(),
+                            g.getDealerScore(),
+                            playerDtos,
+                            dealerDtos
+                    );
+                });
         // Act & Assert
         StepVerifier.create(gameService.createGame("John"))
                 .assertNext(response -> assertNotNull(response.createdAt()))

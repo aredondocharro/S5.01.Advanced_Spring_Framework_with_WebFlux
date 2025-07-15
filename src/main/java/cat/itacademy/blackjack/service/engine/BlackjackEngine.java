@@ -1,0 +1,43 @@
+package cat.itacademy.blackjack.service.engine;
+
+import cat.itacademy.blackjack.model.Card;
+import cat.itacademy.blackjack.model.GameStatus;
+import cat.itacademy.blackjack.model.TurnResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class BlackjackEngine {
+
+    private static final Logger logger = LoggerFactory.getLogger(BlackjackEngine.class);
+
+    public TurnResult simulateTurn(List<Card> deck) {
+        List<Card> cards = new ArrayList<>();
+        int score = 0;
+
+        while (score < 17 && !deck.isEmpty()) {
+            Card card = deck.remove(0);
+            cards.add(card);
+            score = calculateScore(cards);
+        }
+
+        logger.debug("Turn simulated. Cards: {}, Score: {}", cards, score);
+        return new TurnResult(score, cards);
+    }
+
+    public int calculateScore(List<Card> cards) {
+        return cards.stream()
+                .mapToInt(card -> card.getValue().getPoints())
+                .sum();
+    }
+
+    public GameStatus determineWinner(int playerScore, int dealerScore) {
+        if (playerScore > 21) return GameStatus.DEALER_WON;
+        if (dealerScore > 21) return GameStatus.PLAYER_WON;
+        if (playerScore > dealerScore) return GameStatus.PLAYER_WON;
+        if (dealerScore > playerScore) return GameStatus.DEALER_WON;
+        return GameStatus.DRAW;
+    }
+}
