@@ -31,7 +31,6 @@ public class GameServiceImpl implements GameService {
     private final GameRepository gameRepository;
     private final PlayerRepository playerRepository;
     private final GameMapper gameMapper;
-    private final CardMapper cardMapper;
     private final DeckManager deckManager;
     private final GameFactory gameFactory;
     private final BlackjackEngine blackjackEngine;
@@ -153,7 +152,6 @@ public class GameServiceImpl implements GameService {
                                 game.setStatus(result);
                                 game.setDeckJson(updatedDeckJson);
 
-                                // Guardar partida y luego actualizar jugador según resultado
                                 return gameRepository.save(game)
                                         .flatMap(updatedGame ->
                                                 playerRepository.findById(updatedGame.getPlayerId())
@@ -179,4 +177,5 @@ public class GameServiceImpl implements GameService {
     }
 
 }
+
 

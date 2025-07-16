@@ -1,7 +1,6 @@
 package cat.itacademy.blackjack.mapper;
 
 import cat.itacademy.blackjack.dto.GameResponse;
-import cat.itacademy.blackjack.mapper.CardMapper;
 import cat.itacademy.blackjack.model.Card;
 import cat.itacademy.blackjack.model.Games;
 import org.mapstruct.Mapper;

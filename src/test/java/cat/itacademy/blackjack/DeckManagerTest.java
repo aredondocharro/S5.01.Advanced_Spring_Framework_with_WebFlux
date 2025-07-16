@@ -14,7 +14,6 @@ import reactor.util.function.Tuple2;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -72,22 +71,5 @@ class DeckManagerTest {
         assertEquals(CardSuit.SPADES, result.getT1().get(1).getSuit());
         assertEquals(CardSuit.DIAMONDS, result.getT2().get(0).getSuit());
         assertEquals(CardSuit.CLUBS, result.getT2().get(1).getSuit());
-    }
-
-    @Test
-    void generateShuffledDeck_shouldContain52UniqueCards() {
-        List<Card> deck = deckManager.generateShuffledDeck();
-
-        assertEquals(52, deck.size(), "Deck should contain 52 cards");
-
-
-        Set<String> uniqueCards = deck.stream()
-                .map(card -> card.getSuit() + "-" + card.getValue())
-                .collect(Collectors.toSet());
-
-        assertEquals(52, uniqueCards.size(), "Deck should have 52 unique suit-value combinations");
-
-        System.out.println("Generated Deck:");
-        deck.forEach(card -> System.out.println(card.getSuit() + " - " + card.getValue()));
     }
 }

@@ -31,14 +31,6 @@ public class PlayerRepositoryIntegrationTest {
         mongoDBContainer.start();
     }
 
-    static class Initializer
-            implements ApplicationContextInitializer<ConfigurableApplicationContext> {
-        public void initialize(ConfigurableApplicationContext context) {
-            TestPropertyValues.of(
-                    "spring.data.mongodb.uri=" + mongoDBContainer.getReplicaSetUrl()
-            ).applyTo(context.getEnvironment());
-        }
-    }
 
     @Test
     void testSaveAndFind() {
