@@ -42,8 +42,8 @@ public class GameFactory {
                 .playerScore(playerScore)
                 .dealerScore(dealerScore)
                 .deckJson(deckManager.serializeDeck(remainingDeck))
-                .playerCardsJson(deckManager.serializeDeck(playerCards))  // ✅ nuevo campo
-                .dealerCardsJson(deckManager.serializeDeck(dealerCards))  // ✅ nuevo campo
+                .playerCardsJson(deckManager.serializeDeck(playerCards))
+                .dealerCardsJson(deckManager.serializeDeck(dealerCards))
                 .build();
     }
 

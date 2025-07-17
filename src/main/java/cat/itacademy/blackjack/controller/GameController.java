@@ -28,14 +28,14 @@ public class GameController {
                 .map(game -> ResponseEntity.status(HttpStatus.CREATED).body(game));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/details/{id}")
     @Operation(summary = "Get game details", description = "Retrieves details of a specific game by its ID.")
     public Mono<ResponseEntity<GameResponse>> getGameById(@PathVariable("id") Long gameId) {
         return gameService.getGameById(gameId)
                 .map(ResponseEntity::ok);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{id}")
     @Operation(summary = "Delete a game", description = "Deletes a specific game by its ID.")
     public Mono<ResponseEntity<Void>> deleteGame(@PathVariable("id") Long gameId) {
         return gameService.deleteGame(gameId)

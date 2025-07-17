@@ -3,6 +3,7 @@ package cat.itacademy.blackjack.gameservice;
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.InsufficientCardsException;
+import cat.itacademy.blackjack.exception.InvalidGameStateException;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
@@ -42,8 +43,8 @@ class GameHitProcessorTest {
         game.setStatus(GameStatus.IN_PROGRESS);
         game.setTurn(GameTurn.PLAYER_TURN);
         game.setDeckJson("serialized");
-        game.setPlayerCards(new ArrayList<>());
-        game.setDealerCards(new ArrayList<>());
+        game.setPlayerCardsJson("[]"); // Necesario para que no pete
+        game.setDealerCardsJson("[]");
     }
 
     @Test
@@ -68,7 +69,7 @@ class GameHitProcessorTest {
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
-                .expectError(IllegalStateException.class)
+                .expectError(InvalidGameStateException.class)
                 .verify();
     }
 
@@ -87,12 +88,15 @@ class GameHitProcessorTest {
         List<Card> deck = new ArrayList<>();
         Card newCard = new Card(CardSuit.HEARTS, CardValue.FIVE);
         deck.add(newCard);
+        List<Card> playerCards = new ArrayList<>();
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
         when(deckManager.deserializeCardsReactive("serialized")).thenReturn(Mono.just(deck));
+        when(deckManager.deserializeCardsReactive("[]")).thenReturn(Mono.just(playerCards));
         when(blackjackEngine.calculateScore(anyList())).thenReturn(16);
-        when(deckManager.serializeDeck(deck)).thenReturn("updatedDeck");
+        when(deckManager.serializeDeck(anyList())).thenReturn("updatedDeck");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(new ArrayList<>()));
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
@@ -105,12 +109,15 @@ class GameHitProcessorTest {
         List<Card> deck = new ArrayList<>();
         Card newCard = new Card(CardSuit.SPADES, CardValue.KING);
         deck.add(newCard);
+        List<Card> playerCards = new ArrayList<>();
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
         when(deckManager.deserializeCardsReactive("serialized")).thenReturn(Mono.just(deck));
+        when(deckManager.deserializeCardsReactive("[]")).thenReturn(Mono.just(playerCards));
         when(blackjackEngine.calculateScore(anyList())).thenReturn(25); // bust
-        when(deckManager.serializeDeck(deck)).thenReturn("deckAfterBust");
+        when(deckManager.serializeDeck(anyList())).thenReturn("deckAfterBust");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(new ArrayList<>()));
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
@@ -118,3 +125,4 @@ class GameHitProcessorTest {
                 .verifyComplete();
     }
 }
+

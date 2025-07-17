@@ -2,6 +2,7 @@ package cat.itacademy.blackjack.gameservice;
 
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
+import cat.itacademy.blackjack.exception.InvalidGameStateException;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
@@ -28,9 +29,6 @@ class GameStandProcessorTest {
     private GameRepository gameRepository;
 
     @Mock
-    private PlayerRepository playerRepository;
-
-    @Mock
     private GameMapper gameMapper;
 
     @Mock
@@ -43,19 +41,34 @@ class GameStandProcessorTest {
     private GameStandProcessor gameStandProcessor;
 
     private Games game;
-    private Player player;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         game = new Games();
         game.setId(1L);
+        game.setTurn(GameTurn.PLAYER_TURN);
         game.setPlayerId("player123");
         game.setStatus(GameStatus.IN_PROGRESS);
-        game.setDeckJson("[]");
-        game.setPlayerCards(List.of(new Card(CardSuit.HEARTS, CardValue.EIGHT), new Card(CardSuit.SPADES, CardValue.SEVEN)));
-        player = new Player("player123", "John", 0, 0, 0, null);
+
+        List<Card> playerCards = List.of(
+                new Card(CardSuit.HEARTS, CardValue.EIGHT),
+                new Card(CardSuit.SPADES, CardValue.SEVEN)
+        );
+        game.setPlayerCards(playerCards);
+        game.setPlayerCardsJson("[{\"suit\":\"HEARTS\",\"value\":\"EIGHT\"},{\"suit\":\"SPADES\",\"value\":\"SEVEN\"}]");
+
+        List<Card> dealerCards = List.of(
+                new Card(CardSuit.DIAMONDS, CardValue.TWO),
+                new Card(CardSuit.CLUBS, CardValue.THREE)
+        );
+        game.setDealerCards(dealerCards);
+        game.setDealerCardsJson("[{\"suit\":\"DIAMONDS\",\"value\":\"TWO\"},{\"suit\":\"CLUBS\",\"value\":\"THREE\"}]");
+
+        game.setDeckJson("[{\"suit\":\"DIAMONDS\",\"value\":\"TEN\"},{\"suit\":\"SPADES\",\"value\":\"FIVE\"}]");
+
     }
+
 
     @Test
     void processStand_shouldFail_whenGameIdIsNull() {
@@ -79,7 +92,7 @@ class GameStandProcessorTest {
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
 
         StepVerifier.create(gameStandProcessor.processStand(1L))
-                .expectError(IllegalStateException.class)
+                .expectError(InvalidGameStateException.class)
                 .verify();
     }
 
@@ -87,19 +100,23 @@ class GameStandProcessorTest {
     void processStand_shouldSimulateDealerTurn_andReturnUpdatedGame() {
         List<Card> deck = List.of(
                 new Card(CardSuit.DIAMONDS, CardValue.TEN),
-                new Card(CardSuit.CLUBS, CardValue.FIVE)
+                new Card(CardSuit.SPADES, CardValue.FIVE)
         );
-        TurnResult dealerTurn = new TurnResult(18, deck);
+        List<Card> playerCards = game.getPlayerCards();
+        List<Card> dealerCards = game.getDealerCards();
+
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.deserializeCardsReactive(anyString())).thenReturn(Mono.just(deck));
-        when(blackjackEngine.simulateTurn(anyList())).thenReturn(dealerTurn);
-        when(blackjackEngine.calculateScore(game.getPlayerCards())).thenReturn(15);
+        when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(dealerCards));
+        when(deckManager.deserializeCardsReactive(game.getPlayerCardsJson())).thenReturn(Mono.just(playerCards));
+        when(deckManager.deserializeCardsReactive(game.getDeckJson())).thenReturn(Mono.just(deck));
+
+        when(blackjackEngine.calculateScore(playerCards)).thenReturn(15);
+        when(blackjackEngine.calculateScore(dealerCards)).thenReturn(16).thenReturn(18); // simula que pide una carta
         when(blackjackEngine.determineWinner(15, 18)).thenReturn(GameStatus.FINISHED_DEALER_WON);
-        when(deckManager.serializeDeck(deck)).thenReturn("serializedDeck");
+
+        when(deckManager.serializeCards(anyList())).thenReturn("serializedDeck");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(playerRepository.findById("player123")).thenReturn(Mono.just(player));
-        when(playerRepository.save(any())).thenReturn(Mono.just(player));
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
 
         StepVerifier.create(gameStandProcessor.processStand(1L))

@@ -34,37 +34,36 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class GameServiceImplTest {
 
-    @Mock
-    private GameRepository gameRepository;
-    @Mock
-    private PlayerRepository playerRepository;
-    @Mock
-    private GameMapper gameMapper;
-    @Mock
-    private DeckManager deckManager;
-    @Mock
-    private BlackjackEngine blackjackEngine;
-    @Mock
-    private GameCreationService gameCreationService;
-    @Mock
-    private GameHitProcessor gameHitProcessor;
-    @Mock
-    private GameStandProcessor gameStandProcessor;
+    @Mock private GameRepository gameRepository;
+    @Mock private PlayerRepository playerRepository;
+    @Mock private GameMapper gameMapper;
+    @Mock private DeckManager deckManager;
+    @Mock private BlackjackEngine blackjackEngine;
+    @Mock private GameCreationService gameCreationService;
+    @Mock private GameHitProcessor gameHitProcessor;
+    @Mock private GameStandProcessor gameStandProcessor;
 
     @InjectMocks
     private GameServiceImpl gameService;
 
     private Player player;
     private Games game;
+    private GameResponse mockResponse;
 
     @BeforeEach
     void setUp() {
         player = new Player("playerId", "John", 100, 10, 5, null);
+
         game = new Games();
         game.setId(1L);
         game.setPlayerId("playerId");
         game.setStatus(GameStatus.IN_PROGRESS);
-        game.setDeckJson("[]"); // simplificado
+        game.setTurn(GameTurn.PLAYER_TURN);
+        game.setDeckJson("[]");
+        game.setPlayerCardsJson("[]");
+        game.setDealerCardsJson("[]");
+
+        mockResponse = mock(GameResponse.class);
     }
 
     // --- createGame ---
@@ -78,7 +77,6 @@ class GameServiceImplTest {
                 .verify();
     }
 
-
     @Test
     void createGame_shouldFail_whenPlayerNotFound() {
         when(gameCreationService.createGame("John"))
@@ -89,7 +87,6 @@ class GameServiceImplTest {
                 .verify();
     }
 
-
     @Test
     void createGame_shouldFail_whenDeckIsInsufficient() {
         when(gameCreationService.createGame("John"))
@@ -99,7 +96,6 @@ class GameServiceImplTest {
                 .expectError(InsufficientCardsException.class)
                 .verify();
     }
-
 
     // --- getGameById ---
     @Test
@@ -121,48 +117,23 @@ class GameServiceImplTest {
     @Test
     void getGameById_shouldSucceed() {
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.deserializeCardsReactive(anyString()))
-                .thenReturn(Mono.just(List.of(new Card(CardSuit.HEARTS, CardValue.EIGHT))));
-        when(deckManager.splitDeck(anyList()))
-                .thenReturn(Tuples.of(List.of(), List.of()));
-        when(gameMapper.toResponse(eq(game), anyList(), anyList()))
-                .thenReturn(new GameResponse(
-                        1L,
-                        "playerId",
-                        LocalDateTime.now(),
-                        GameStatus.IN_PROGRESS,
-                        GameTurn.PLAYER_TURN,
-                        18,
-                        17,
-                        List.of(),
-                        List.of()
-                ));
+        when(deckManager.deserializeCardsReactive(anyString())).thenReturn(Mono.just(List.of()));
+        when(gameMapper.toResponse(eq(game), anyList(), anyList())).thenReturn(mockResponse);
 
         StepVerifier.create(gameService.getGameById(1L))
-                .expectNextCount(1)
+                .expectNext(mockResponse)
                 .verifyComplete();
     }
 
+    // --- getAllGames ---
     @Test
     void getAllGames_shouldReturnAll() {
         when(gameRepository.findAll()).thenReturn(Flux.just(game));
         when(deckManager.deserializeCardsReactive(anyString())).thenReturn(Mono.just(List.of()));
-        when(deckManager.splitDeck(anyList())).thenReturn(Tuples.of(List.of(), List.of()));
-        when(gameMapper.toResponse(eq(game), anyList(), anyList()))
-                .thenReturn(new GameResponse(
-                        1L,
-                        "playerId",
-                        LocalDateTime.now(),
-                        GameStatus.IN_PROGRESS,
-                        GameTurn.PLAYER_TURN,
-                        18,
-                        17,
-                        List.of(),
-                        List.of()
-                ));
+        when(gameMapper.toResponse(eq(game), anyList(), anyList())).thenReturn(mockResponse);
 
         StepVerifier.create(gameService.getAllGames())
-                .expectNextCount(1)
+                .expectNext(mockResponse)
                 .verifyComplete();
     }
 
@@ -188,9 +159,7 @@ class GameServiceImplTest {
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
         when(gameRepository.delete(game)).thenReturn(Mono.empty());
 
-        StepVerifier.create(gameService.deleteGame(1L))
-                .verifyComplete();
-
+        StepVerifier.create(gameService.deleteGame(1L)).verifyComplete();
         verify(gameRepository).delete(game);
     }
 
@@ -207,16 +176,12 @@ class GameServiceImplTest {
 
     @Test
     void hit_shouldReturnProcessedResponse() {
-        Long gameId = 1L;
-        GameResponse mockResponse = mock(GameResponse.class);
+        when(gameHitProcessor.processHit(1L)).thenReturn(Mono.just(mockResponse));
 
-        when(gameHitProcessor.processHit(gameId)).thenReturn(Mono.just(mockResponse));
-
-        StepVerifier.create(gameService.hit(gameId))
+        StepVerifier.create(gameService.hit(1L))
                 .expectNext(mockResponse)
                 .verifyComplete();
     }
-
 
     @Test
     void stand_shouldFail_whenIdIsNull() {
@@ -230,13 +195,11 @@ class GameServiceImplTest {
 
     @Test
     void stand_shouldReturnProcessedResponse() {
-        Long gameId = 1L;
-        GameResponse mockResponse = mock(GameResponse.class);
+        when(gameStandProcessor.processStand(1L)).thenReturn(Mono.just(mockResponse));
 
-        when(gameStandProcessor.processStand(gameId)).thenReturn(Mono.just(mockResponse));
-
-        StepVerifier.create(gameService.stand(gameId))
+        StepVerifier.create(gameService.stand(1L))
                 .expectNext(mockResponse)
                 .verifyComplete();
     }
 }
+

@@ -24,7 +24,7 @@ public record GameResponse(
         GameStatus status,
 
         @Schema(description = "Current turn in the game", example = "PLAYER_TURN")
-        GameTurn turn, // ✅ NUEVO CAMPO
+        GameTurn turn,
 
         @Schema(description = "Total score of the player", example = "19")
         int playerScore,

@@ -37,7 +37,6 @@ public class GameHitProcessor {
                         return Mono.error(new InvalidGameStateException("Game is already finished or not in player's turn."));
                     }
 
-                    // 🔁 Cambiamos parseDeckReactive por deserializeCardsReactive
                     return deckManager.deserializeCardsReactive(game.getDeckJson())
                             .flatMap(deck -> {
                                 if (deck.isEmpty()) {
@@ -53,7 +52,6 @@ public class GameHitProcessor {
 
                                             int newScore = blackjackEngine.calculateScore(updatedPlayerCards);
 
-                                            // 💾 Actualizar el estado del juego
                                             game.setPlayerCardsJson(deckManager.serializeDeck(updatedPlayerCards));
                                             game.setPlayerScore(newScore);
                                             game.setDeckJson(deckManager.serializeDeck(deck));

@@ -1,5 +1,7 @@
 package cat.itacademy.blackjack;
 
+import cat.itacademy.blackjack.model.GameStatus;
+import cat.itacademy.blackjack.model.GameTurn;
 import cat.itacademy.blackjack.model.Games;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+
+import java.time.LocalDateTime;
 
 @Testcontainers
 @SpringBootTest
@@ -33,7 +37,7 @@ public class GameRepositoryIntegrationTest {
         );
         registry.add("spring.r2dbc.username", mysql::getUsername);
         registry.add("spring.r2dbc.password", mysql::getPassword);
-        registry.add("spring.flyway.enabled", () -> "false"); // si usas flyway
+        registry.add("spring.flyway.enabled", () -> "false");
     }
 
     @Autowired
@@ -41,9 +45,22 @@ public class GameRepositoryIntegrationTest {
 
     @Test
     void testSaveGame() {
-        Games game = Games.builder().playerId("mongoId123").playerScore(10).dealerScore(20).build();
+        Games game = Games.builder()
+                .playerId("mongoId123")
+                .createdAt(LocalDateTime.now())
+                .status(GameStatus.IN_PROGRESS)
+                .turn(GameTurn.PLAYER_TURN)
+                .playerScore(10)
+                .dealerScore(20)
+                .deckJson("[]")
+                .playerCardsJson("[]")
+                .dealerCardsJson("[]")
+                .build();
 
         Mono<Games> saved = gameRepository.save(game);
-        StepVerifier.create(saved).expectNextMatches(g -> g.getPlayerId().equals("mongoId123")).verifyComplete();
+
+        StepVerifier.create(saved)
+                .expectNextMatches(g -> g.getPlayerId().equals("mongoId123"))
+                .verifyComplete();
     }
 }

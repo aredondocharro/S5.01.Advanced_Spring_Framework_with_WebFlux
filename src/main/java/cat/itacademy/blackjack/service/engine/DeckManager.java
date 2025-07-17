@@ -27,7 +27,6 @@ public class DeckManager {
         this.objectMapper = objectMapper;
     }
 
-    // Genera un mazo barajado
     public List<Card> generateShuffledDeck() {
         List<Card> deck = new ArrayList<>();
         for (CardSuit suit : CardSuit.values()) {
@@ -39,13 +38,10 @@ public class DeckManager {
         return deck;
     }
 
-    // Serializa una lista de cartas (deck)
     public String serializeDeck(List<Card> deck) {
         return serializeCards(deck);
     }
 
-
-    // Nueva: serializa cualquier lista de cartas (jugador, dealer, deck)
     public String serializeCards(List<Card> cards) {
         try {
             return objectMapper.writeValueAsString(cards);
@@ -55,8 +51,6 @@ public class DeckManager {
         }
     }
 
-
-    // Versión reactiva para deserializar deck
     public Mono<List<Card>> deserializeCardsReactive(String deckJson) {
         if (deckJson == null || deckJson.isBlank()) {
             return Mono.just(List.of());
@@ -70,7 +64,6 @@ public class DeckManager {
         }
     }
 
-    // Divide el mazo entre jugador y dealer
     public Tuple2<List<Card>, List<Card>> splitDeck(List<Card> deck) {
         List<Card> playerCards = deck.size() >= 2 ? deck.subList(0, 2) : new ArrayList<>(deck);
         List<Card> dealerCards = deck.size() >= 4 ? deck.subList(2, 4) :
