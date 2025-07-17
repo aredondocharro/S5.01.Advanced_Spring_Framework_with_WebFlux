@@ -24,6 +24,7 @@ public class GameHitProcessor {
     private final DeckManager deckManager;
     private final BlackjackEngine blackjackEngine;
     private final GameMapper gameMapper;
+    private final PlayerStatsUpdater playerStatsUpdater;
 
     public Mono<GameResponse> processHit(Long gameId) {
         if (gameId == null) {
@@ -37,39 +38,47 @@ public class GameHitProcessor {
                         return Mono.error(new InvalidGameStateException("Game is already finished or not in player's turn."));
                     }
 
-                    return deckManager.deserializeCardsReactive(game.getDeckJson())
-                            .flatMap(deck -> {
-                                if (deck.isEmpty()) {
-                                    return Mono.error(new InsufficientCardsException("No cards left in deck"));
-                                }
+                    return Mono.zip(
+                            deckManager.deserializeCardsReactive(game.getDeckJson()),
+                            deckManager.deserializeCardsReactive(game.getPlayerCardsJson()),
+                            deckManager.deserializeCardsReactive(game.getDealerCardsJson())
+                    ).flatMap(tuple -> {
+                        List<Card> deck = new ArrayList<>(tuple.getT1());
+                        List<Card> playerCards = new ArrayList<>(tuple.getT2());
+                        List<Card> dealerCards = tuple.getT3();
 
-                                Card newCard = deck.remove(0);
+                        if (deck.isEmpty()) {
+                            return Mono.error(new InsufficientCardsException("No cards left in deck"));
+                        }
 
-                                return deckManager.deserializeCardsReactive(game.getPlayerCardsJson())
-                                        .flatMap(playerCards -> {
-                                            List<Card> updatedPlayerCards = new ArrayList<>(playerCards);
-                                            updatedPlayerCards.add(newCard);
+                        // Añadir nueva carta al jugador
+                        Card newCard = deck.remove(0);
+                        playerCards.add(newCard);
 
-                                            int newScore = blackjackEngine.calculateScore(updatedPlayerCards);
+                        int playerScore = blackjackEngine.calculateScore(playerCards);
 
-                                            game.setPlayerCardsJson(deckManager.serializeDeck(updatedPlayerCards));
-                                            game.setPlayerScore(newScore);
-                                            game.setDeckJson(deckManager.serializeDeck(deck));
+                        // Actualizar el juego
+                        game.setPlayerCardsJson(deckManager.serializeDeck(playerCards));
+                        game.setDeckJson(deckManager.serializeDeck(deck));
+                        game.setPlayerScore(playerScore);
 
-                                            if (newScore > 21) {
-                                                game.setStatus(GameStatus.FINISHED_DEALER_WON);
-                                                game.setTurn(GameTurn.FINISHED);
-                                            }
+                        // Evaluar si el jugador ha terminado
+                        if (playerScore > 21) {
+                            game.setStatus(GameStatus.FINISHED_DEALER_WON);
+                            game.setTurn(GameTurn.FINISHED);
+                        } else if (playerScore == 21) {
+                            // Puede que en tu lógica quieras resolver automáticamente contra dealer aquí
+                            GameStatus resolved = blackjackEngine.determineWinner(playerScore, game.getDealerScore());
+                            game.setStatus(resolved);
+                            game.setTurn(GameTurn.FINISHED);
+                        }
 
-                                            return gameRepository.save(game)
-                                                    .flatMap(updated ->
-                                                            deckManager.deserializeCardsReactive(game.getDealerCardsJson())
-                                                                    .map(dealerCards ->
-                                                                            gameMapper.toResponse(updated, updatedPlayerCards, dealerCards)
-                                                                    )
-                                                    );
-                                        });
-                            });
+                        return gameRepository.save(game)
+                                .flatMap(updated ->
+                                        playerStatsUpdater.updateAfterGameIfFinished(updated)
+                                                .thenReturn(gameMapper.toResponse(updated, playerCards, dealerCards))
+                                );
+                    });
                 });
     }
 }

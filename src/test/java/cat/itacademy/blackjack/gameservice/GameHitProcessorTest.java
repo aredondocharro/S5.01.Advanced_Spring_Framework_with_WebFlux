@@ -10,6 +10,7 @@ import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.engine.BlackjackEngine;
 import cat.itacademy.blackjack.service.engine.DeckManager;
 import cat.itacademy.blackjack.service.logic.GameHitProcessor;
+import cat.itacademy.blackjack.service.logic.PlayerStatsUpdater;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -29,6 +30,7 @@ class GameHitProcessorTest {
     @Mock private DeckManager deckManager;
     @Mock private BlackjackEngine blackjackEngine;
     @Mock private GameMapper gameMapper;
+    @Mock private PlayerStatsUpdater playerStatsUpdater;
 
     @InjectMocks
     private GameHitProcessor gameHitProcessor;
@@ -75,8 +77,14 @@ class GameHitProcessorTest {
 
     @Test
     void processHit_shouldFail_whenDeckIsEmpty() {
+        game.setDeckJson("deck");
+        game.setPlayerCardsJson("player");
+        game.setDealerCardsJson("dealer");
+
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.deserializeCardsReactive("serialized")).thenReturn(Mono.just(new ArrayList<>()));
+        when(deckManager.deserializeCardsReactive("deck")).thenReturn(Mono.just(new ArrayList<>()));
+        when(deckManager.deserializeCardsReactive("player")).thenReturn(Mono.just(List.of(new Card())));
+        when(deckManager.deserializeCardsReactive("dealer")).thenReturn(Mono.just(List.of(new Card())));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
                 .expectError(InsufficientCardsException.class)
@@ -85,44 +93,61 @@ class GameHitProcessorTest {
 
     @Test
     void processHit_shouldAddCard_andContinueGame() {
+        game.setDeckJson("deck");
+        game.setPlayerCardsJson("player");
+        game.setDealerCardsJson("dealer");
+
         List<Card> deck = new ArrayList<>();
         Card newCard = new Card(CardSuit.HEARTS, CardValue.FIVE);
         deck.add(newCard);
+
         List<Card> playerCards = new ArrayList<>();
+        List<Card> dealerCards = new ArrayList<>();
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.deserializeCardsReactive("serialized")).thenReturn(Mono.just(deck));
-        when(deckManager.deserializeCardsReactive("[]")).thenReturn(Mono.just(playerCards));
-        when(blackjackEngine.calculateScore(anyList())).thenReturn(16);
+        when(deckManager.deserializeCardsReactive("deck")).thenReturn(Mono.just(deck));
+        when(deckManager.deserializeCardsReactive("player")).thenReturn(Mono.just(playerCards));
+        when(deckManager.deserializeCardsReactive("dealer")).thenReturn(Mono.just(dealerCards));
+        when(blackjackEngine.calculateScore(anyList())).thenReturn(16); // No bust
         when(deckManager.serializeDeck(anyList())).thenReturn("updatedDeck");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(new ArrayList<>()));
+        when(playerStatsUpdater.updateAfterGameIfFinished(any())).thenReturn(Mono.empty()); // <--- AÑADIDO
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
                 .expectNextCount(1)
                 .verifyComplete();
     }
+
 
     @Test
     void processHit_shouldAddCard_andFinishGameIfBust() {
+        game.setDeckJson("deck");
+        game.setPlayerCardsJson("player");
+        game.setDealerCardsJson("dealer");
+
         List<Card> deck = new ArrayList<>();
         Card newCard = new Card(CardSuit.SPADES, CardValue.KING);
         deck.add(newCard);
+
         List<Card> playerCards = new ArrayList<>();
+        List<Card> dealerCards = new ArrayList<>();
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.deserializeCardsReactive("serialized")).thenReturn(Mono.just(deck));
-        when(deckManager.deserializeCardsReactive("[]")).thenReturn(Mono.just(playerCards));
-        when(blackjackEngine.calculateScore(anyList())).thenReturn(25); // bust
+        when(deckManager.deserializeCardsReactive("deck")).thenReturn(Mono.just(deck));
+        when(deckManager.deserializeCardsReactive("player")).thenReturn(Mono.just(playerCards));
+        when(deckManager.deserializeCardsReactive("dealer")).thenReturn(Mono.just(dealerCards));
+        when(blackjackEngine.calculateScore(anyList())).thenReturn(25); // BUST
         when(deckManager.serializeDeck(anyList())).thenReturn("deckAfterBust");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(new ArrayList<>()));
+        when(playerStatsUpdater.updateAfterGameIfFinished(any())).thenReturn(Mono.empty()); // <--- AÑADIDO
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
 
         StepVerifier.create(gameHitProcessor.processHit(1L))
                 .expectNextCount(1)
                 .verifyComplete();
     }
+
+
 }
 

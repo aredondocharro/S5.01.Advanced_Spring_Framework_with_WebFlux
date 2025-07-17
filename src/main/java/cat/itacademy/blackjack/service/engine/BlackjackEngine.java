@@ -45,5 +45,22 @@ public class BlackjackEngine {
         if (dealerScore > playerScore) return GameStatus.FINISHED_DEALER_WON;
         return GameStatus.FINISHED_DRAW;
     }
+
+    public TurnResult simulateTurnWithInitial(List<Card> initialCards, List<Card> deck) {
+        Objects.requireNonNull(deck, "Deck cannot be null");
+
+        List<Card> cards = new ArrayList<>(initialCards);
+        int score = calculateScore(cards);
+
+        while (score < 17 && !deck.isEmpty()) {
+            Card card = deck.remove(0);
+            cards.add(card);
+            score = calculateScore(cards);
+        }
+
+        logger.debug("Dealer turn simulated. Cards: {}, Score: {}", cards, score);
+        return new TurnResult(score, cards);
+    }
+
 }
 

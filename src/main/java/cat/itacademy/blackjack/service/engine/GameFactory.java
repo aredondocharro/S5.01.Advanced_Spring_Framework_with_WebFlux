@@ -13,9 +13,11 @@ import java.util.Objects;
 public class GameFactory {
 
     private final DeckManager deckManager;
+    private final BlackjackEngine blackjackEngine;
 
-    public GameFactory(DeckManager deckManager) {
+    public GameFactory(DeckManager deckManager, BlackjackEngine blackjackEngine) {
         this.deckManager = deckManager;
+        this.blackjackEngine = blackjackEngine;
     }
 
     public Games createNewGame(String playerId, List<Card> playerCards, List<Card> dealerCards, List<Card> remainingDeck) {
@@ -32,8 +34,8 @@ public class GameFactory {
             throw new IllegalArgumentException("Dealer must have exactly 2 cards");
         }
 
-        int playerScore = calculateScore(playerCards);
-        int dealerScore = calculateScore(dealerCards);
+        int playerScore = blackjackEngine.calculateScore(playerCards);
+        int dealerScore = blackjackEngine.calculateScore(dealerCards);
 
         return Games.builder()
                 .playerId(playerId)
@@ -46,12 +48,7 @@ public class GameFactory {
                 .dealerCardsJson(deckManager.serializeDeck(dealerCards))
                 .build();
     }
-
-    public int calculateScore(List<Card> cards) {
-        return cards.stream()
-                .mapToInt(card -> card.getValue().getPoints())
-                .sum();
-    }
 }
+
 
 

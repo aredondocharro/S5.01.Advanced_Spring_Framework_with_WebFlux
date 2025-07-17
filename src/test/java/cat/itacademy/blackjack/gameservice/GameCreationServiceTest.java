@@ -11,6 +11,7 @@ import cat.itacademy.blackjack.service.engine.BlackjackEngine;
 import cat.itacademy.blackjack.service.engine.DeckManager;
 import cat.itacademy.blackjack.service.engine.GameFactory;
 import cat.itacademy.blackjack.service.logic.GameCreationService;
+import cat.itacademy.blackjack.service.logic.PlayerStatsUpdater;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -31,6 +32,7 @@ public class GameCreationServiceTest {
     private GameFactory gameFactory;
     private GameMapper gameMapper;
     private BlackjackEngine blackjackEngine;
+    private PlayerStatsUpdater playerStatsUpdater;
     private GameCreationService gameCreationService;
 
     @BeforeEach
@@ -41,6 +43,7 @@ public class GameCreationServiceTest {
         gameFactory = mock(GameFactory.class);
         gameMapper = mock(GameMapper.class);
         blackjackEngine = mock(BlackjackEngine.class);
+        playerStatsUpdater = mock(PlayerStatsUpdater.class);
 
         gameCreationService = new GameCreationService(
                 playerRepository,
@@ -48,7 +51,7 @@ public class GameCreationServiceTest {
                 deckManager,
                 gameFactory,
                 gameMapper,
-                blackjackEngine
+                playerStatsUpdater
         );
     }
 
@@ -115,6 +118,7 @@ public class GameCreationServiceTest {
         when(gameRepository.save(any(Games.class))).thenReturn(Mono.just(mockGame));
         when(blackjackEngine.calculateScore(anyList())).thenReturn(10);
         when(gameMapper.toResponse(any(Games.class), anyList(), anyList())).thenReturn(expectedResponse);
+        when(playerStatsUpdater.updateAfterGameIfFinished(mockGame)).thenReturn(Mono.empty());
 
         // Act & Assert
         StepVerifier.create(gameCreationService.createGame("John"))

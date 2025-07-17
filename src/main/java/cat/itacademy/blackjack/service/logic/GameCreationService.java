@@ -29,7 +29,7 @@ public class GameCreationService {
     private final DeckManager deckManager;
     private final GameFactory gameFactory;
     private final GameMapper gameMapper;
-    private final BlackjackEngine blackjackEngine;
+    private final PlayerStatsUpdater playerStatsUpdater;
 
     public Mono<GameResponse> createGame(String playerName) {
         if (playerName == null || playerName.trim().isEmpty()) {
@@ -59,7 +59,10 @@ public class GameCreationService {
 
                     return gameRepository.save(game)
                             .doOnSuccess(saved -> logger.info("Game created with ID: {}", saved.getId()))
-                            .map(savedGame -> gameMapper.toResponse(savedGame, playerCards, dealerCards));
+                            .flatMap(savedGame ->
+                                    playerStatsUpdater.updateAfterGameIfFinished(savedGame)
+                                            .thenReturn(gameMapper.toResponse(savedGame, playerCards, dealerCards))
+                            );
                 });
     }
 }
