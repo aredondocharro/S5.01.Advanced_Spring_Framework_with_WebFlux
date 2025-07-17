@@ -2,7 +2,6 @@ package cat.itacademy.blackjack.service.logic;
 
 import cat.itacademy.blackjack.model.GameStatus;
 import cat.itacademy.blackjack.model.Games;
-import cat.itacademy.blackjack.model.Player;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;

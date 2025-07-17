@@ -5,11 +5,11 @@ import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.InvalidGameStateException;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
-import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.engine.BlackjackEngine;
 import cat.itacademy.blackjack.service.engine.DeckManager;
 import cat.itacademy.blackjack.service.logic.GameStandProcessor;
+import cat.itacademy.blackjack.service.logic.PlayerStatsUpdater;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -40,6 +40,9 @@ class GameStandProcessorTest {
     @InjectMocks
     private GameStandProcessor gameStandProcessor;
 
+    @Mock
+    private PlayerStatsUpdater playerStatsUpdater;
+
     private Games game;
 
     @BeforeEach
@@ -50,6 +53,7 @@ class GameStandProcessorTest {
         game.setTurn(GameTurn.PLAYER_TURN);
         game.setPlayerId("player123");
         game.setStatus(GameStatus.IN_PROGRESS);
+
 
         List<Card> playerCards = List.of(
                 new Card(CardSuit.HEARTS, CardValue.EIGHT),
@@ -105,22 +109,31 @@ class GameStandProcessorTest {
         List<Card> playerCards = game.getPlayerCards();
         List<Card> dealerCards = game.getDealerCards();
 
+        TurnResult mockedTurn = new TurnResult(
+                18,
+                List.of(
+                        new Card(CardSuit.DIAMONDS, CardValue.TEN),
+                        new Card(CardSuit.SPADES, CardValue.FIVE)
+                )
+        );
 
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
         when(deckManager.deserializeCardsReactive(game.getDealerCardsJson())).thenReturn(Mono.just(dealerCards));
         when(deckManager.deserializeCardsReactive(game.getPlayerCardsJson())).thenReturn(Mono.just(playerCards));
         when(deckManager.deserializeCardsReactive(game.getDeckJson())).thenReturn(Mono.just(deck));
 
+        when(blackjackEngine.simulateTurnWithInitial(dealerCards, deck)).thenReturn(mockedTurn);
         when(blackjackEngine.calculateScore(playerCards)).thenReturn(15);
-        when(blackjackEngine.calculateScore(dealerCards)).thenReturn(16).thenReturn(18); // simula que pide una carta
         when(blackjackEngine.determineWinner(15, 18)).thenReturn(GameStatus.FINISHED_DEALER_WON);
 
         when(deckManager.serializeCards(anyList())).thenReturn("serializedDeck");
         when(gameRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(gameMapper.toResponse(any(), anyList(), anyList())).thenReturn(mock(GameResponse.class));
+        when(playerStatsUpdater.updateAfterGameIfFinished(any())).thenReturn(Mono.empty());
 
         StepVerifier.create(gameStandProcessor.processStand(1L))
                 .expectNextCount(1)
                 .verifyComplete();
     }
+
 }

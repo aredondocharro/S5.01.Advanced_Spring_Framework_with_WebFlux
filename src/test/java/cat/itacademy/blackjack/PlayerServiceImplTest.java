@@ -1,6 +1,5 @@
 package cat.itacademy.blackjack;
 
-import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.exception.InvalidPlayerNameException;

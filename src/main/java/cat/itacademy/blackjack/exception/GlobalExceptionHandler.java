@@ -81,6 +81,14 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(InvalidInitialCardsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidInitialCards(InvalidInitialCardsException ex, ServerWebExchange exchange) {
+        return ResponseEntity.badRequest().body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST,"Invalid Initial Cards",ex.getMessage(),exchange.getRequest().getPath().value()
+                )
+        );
+    }
+
     @ExceptionHandler(InvalidPlayerNameException.class)
     public ResponseEntity<ErrorResponse> handleInvalidPlayerName(InvalidPlayerNameException ex, ServerWebExchange exchange) {
         return ResponseEntity.badRequest().body(
