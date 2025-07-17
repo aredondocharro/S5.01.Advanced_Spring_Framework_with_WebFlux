@@ -1,6 +1,7 @@
 package cat.itacademy.blackjack.dto;
 
 import cat.itacademy.blackjack.model.GameStatus;
+import cat.itacademy.blackjack.model.GameTurn;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -21,6 +22,9 @@ public record GameResponse(
 
         @Schema(description = "Status of the game", example = "IN_PROGRESS")
         GameStatus status,
+
+        @Schema(description = "Current turn in the game", example = "PLAYER_TURN")
+        GameTurn turn, // ✅ NUEVO CAMPO
 
         @Schema(description = "Total score of the player", example = "19")
         int playerScore,

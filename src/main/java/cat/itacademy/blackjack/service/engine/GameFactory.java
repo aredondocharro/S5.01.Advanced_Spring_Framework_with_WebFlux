@@ -42,9 +42,10 @@ public class GameFactory {
                 .playerScore(playerScore)
                 .dealerScore(dealerScore)
                 .deckJson(deckManager.serializeDeck(remainingDeck))
+                .playerCardsJson(deckManager.serializeDeck(playerCards))  // ✅ nuevo campo
+                .dealerCardsJson(deckManager.serializeDeck(dealerCards))  // ✅ nuevo campo
                 .build();
     }
-
 
     public int calculateScore(List<Card> cards) {
         return cards.stream()

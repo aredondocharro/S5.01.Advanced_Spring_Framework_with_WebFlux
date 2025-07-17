@@ -110,6 +110,10 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
+    @ExceptionHandler(InvalidGameStateException.class)
+    public ResponseEntity<String> handleInvalidGameState(InvalidGameStateException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+    }
 
     private ResponseEntity<Object> buildErrorResponse(HttpStatus status, String errorTitle, String message, ServerWebExchange exchange) {
         Map<String, Object> error = new HashMap<>();
@@ -120,5 +124,6 @@ public class GlobalExceptionHandler {
         error.put("path", exchange.getRequest().getPath().value());
         return new ResponseEntity<>(error, status);
     }
+
 }
 

@@ -38,10 +38,19 @@ public class Games {
     @NotNull
     private String deckJson;
 
+    // Nuevos campos persistentes
+    @NotNull
+    private String playerCardsJson;
+
+    @NotNull
+    private String dealerCardsJson;
+
+    // Campos calculados (transitorios)
     @Transient
     private List<Card> playerCards;
 
     @Transient
     private List<Card> dealerCards;
 }
+
 

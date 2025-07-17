@@ -8,7 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class GamesTest {
+class GameTest {
 
     @Test
     void builder_shouldSetAllFieldsCorrectly() {

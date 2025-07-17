@@ -2,7 +2,6 @@ package cat.itacademy.blackjack;
 
 import cat.itacademy.blackjack.model.Games;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
-import net.bytebuddy.utility.dispatcher.JavaDispatcher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

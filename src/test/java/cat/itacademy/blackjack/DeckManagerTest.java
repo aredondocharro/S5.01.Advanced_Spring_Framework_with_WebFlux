@@ -45,7 +45,7 @@ class DeckManagerTest {
         List<Card> originalDeck = deckManager.generateShuffledDeck();
         String json = deckManager.serializeDeck(originalDeck);
 
-        StepVerifier.create(deckManager.parseDeckReactive(json))
+        StepVerifier.create(deckManager.deserializeCardsReactive(json))
                 .assertNext(parsedDeck -> {
                     assertEquals(52, parsedDeck.size(), "Parsed deck should have 52 cards");
                     assertEquals(originalDeck.get(0).getSuit(), parsedDeck.get(0).getSuit());

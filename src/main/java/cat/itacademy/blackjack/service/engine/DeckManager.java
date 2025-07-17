@@ -21,13 +21,13 @@ import java.util.List;
 public class DeckManager {
 
     private static final Logger logger = LoggerFactory.getLogger(DeckManager.class);
-
     private final ObjectMapper objectMapper;
 
     public DeckManager(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
+    // Genera un mazo barajado
     public List<Card> generateShuffledDeck() {
         List<Card> deck = new ArrayList<>();
         for (CardSuit suit : CardSuit.values()) {
@@ -39,16 +39,25 @@ public class DeckManager {
         return deck;
     }
 
+    // Serializa una lista de cartas (deck)
     public String serializeDeck(List<Card> deck) {
+        return serializeCards(deck);
+    }
+
+
+    // Nueva: serializa cualquier lista de cartas (jugador, dealer, deck)
+    public String serializeCards(List<Card> cards) {
         try {
-            return objectMapper.writeValueAsString(deck);
+            return objectMapper.writeValueAsString(cards);
         } catch (JsonProcessingException e) {
-            logger.error("Error serializing deck", e);
-            throw new RuntimeException("Deck serialization failed", e);
+            logger.error("Error serializing cards", e);
+            throw new RuntimeException("Card list serialization failed", e);
         }
     }
 
-    public Mono<List<Card>> parseDeckReactive(String deckJson) {
+
+    // Versión reactiva para deserializar deck
+    public Mono<List<Card>> deserializeCardsReactive(String deckJson) {
         if (deckJson == null || deckJson.isBlank()) {
             return Mono.just(List.of());
         }
@@ -61,7 +70,7 @@ public class DeckManager {
         }
     }
 
-
+    // Divide el mazo entre jugador y dealer
     public Tuple2<List<Card>, List<Card>> splitDeck(List<Card> deck) {
         List<Card> playerCards = deck.size() >= 2 ? deck.subList(0, 2) : new ArrayList<>(deck);
         List<Card> dealerCards = deck.size() >= 4 ? deck.subList(2, 4) :

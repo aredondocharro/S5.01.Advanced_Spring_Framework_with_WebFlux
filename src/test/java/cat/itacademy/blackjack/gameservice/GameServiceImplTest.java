@@ -1,10 +1,9 @@
-package cat.itacademy.blackjack;
+package cat.itacademy.blackjack.gameservice;
 
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.InsufficientCardsException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
-import cat.itacademy.blackjack.mapper.CardMapper;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
@@ -12,7 +11,9 @@ import cat.itacademy.blackjack.repository.sql.GameRepository;
 import cat.itacademy.blackjack.service.GameServiceImpl;
 import cat.itacademy.blackjack.service.engine.BlackjackEngine;
 import cat.itacademy.blackjack.service.engine.DeckManager;
-import cat.itacademy.blackjack.service.engine.GameFactory;
+import cat.itacademy.blackjack.service.logic.GameCreationService;
+import cat.itacademy.blackjack.service.logic.GameHitProcessor;
+import cat.itacademy.blackjack.service.logic.GameStandProcessor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,13 +41,15 @@ class GameServiceImplTest {
     @Mock
     private GameMapper gameMapper;
     @Mock
-    private CardMapper cardMapper;
-    @Mock
     private DeckManager deckManager;
     @Mock
-    private GameFactory gameFactory;
-    @Mock
     private BlackjackEngine blackjackEngine;
+    @Mock
+    private GameCreationService gameCreationService;
+    @Mock
+    private GameHitProcessor gameHitProcessor;
+    @Mock
+    private GameStandProcessor gameStandProcessor;
 
     @InjectMocks
     private GameServiceImpl gameService;
@@ -67,29 +70,36 @@ class GameServiceImplTest {
     // --- createGame ---
     @Test
     void createGame_shouldFail_whenPlayerNameIsNull() {
+        when(gameCreationService.createGame(null))
+                .thenReturn(Mono.error(new PlayerNotFoundException("Player with name 'null' not found.")));
+
         StepVerifier.create(gameService.createGame(null))
                 .expectError(PlayerNotFoundException.class)
                 .verify();
     }
 
+
     @Test
     void createGame_shouldFail_whenPlayerNotFound() {
-        when(playerRepository.findByName("John")).thenReturn(Mono.empty());
+        when(gameCreationService.createGame("John"))
+                .thenReturn(Mono.error(new PlayerNotFoundException("Player with name 'John' not found.")));
 
         StepVerifier.create(gameService.createGame("John"))
                 .expectError(PlayerNotFoundException.class)
                 .verify();
     }
 
+
     @Test
     void createGame_shouldFail_whenDeckIsInsufficient() {
-        when(playerRepository.findByName("John")).thenReturn(Mono.just(player));
-        when(deckManager.generateShuffledDeck()).thenReturn(List.of()); // < 4
+        when(gameCreationService.createGame("John"))
+                .thenReturn(Mono.error(new InsufficientCardsException("Not enough cards in the deck to start a game")));
 
         StepVerifier.create(gameService.createGame("John"))
                 .expectError(InsufficientCardsException.class)
                 .verify();
     }
+
 
     // --- getGameById ---
     @Test
@@ -111,7 +121,7 @@ class GameServiceImplTest {
     @Test
     void getGameById_shouldSucceed() {
         when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.parseDeckReactive(anyString()))
+        when(deckManager.deserializeCardsReactive(anyString()))
                 .thenReturn(Mono.just(List.of(new Card(CardSuit.HEARTS, CardValue.EIGHT))));
         when(deckManager.splitDeck(anyList()))
                 .thenReturn(Tuples.of(List.of(), List.of()));
@@ -121,6 +131,7 @@ class GameServiceImplTest {
                         "playerId",
                         LocalDateTime.now(),
                         GameStatus.IN_PROGRESS,
+                        GameTurn.PLAYER_TURN,
                         18,
                         17,
                         List.of(),
@@ -135,7 +146,7 @@ class GameServiceImplTest {
     @Test
     void getAllGames_shouldReturnAll() {
         when(gameRepository.findAll()).thenReturn(Flux.just(game));
-        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(List.of()));
+        when(deckManager.deserializeCardsReactive(anyString())).thenReturn(Mono.just(List.of()));
         when(deckManager.splitDeck(anyList())).thenReturn(Tuples.of(List.of(), List.of()));
         when(gameMapper.toResponse(eq(game), anyList(), anyList()))
                 .thenReturn(new GameResponse(
@@ -143,6 +154,7 @@ class GameServiceImplTest {
                         "playerId",
                         LocalDateTime.now(),
                         GameStatus.IN_PROGRESS,
+                        GameTurn.PLAYER_TURN,
                         18,
                         17,
                         List.of(),
@@ -182,114 +194,49 @@ class GameServiceImplTest {
         verify(gameRepository).delete(game);
     }
 
-    // --- playGame ---
+    // --- GameLogic ---
     @Test
-    void playGame_shouldFail_whenIdIsNull() {
-        StepVerifier.create(gameService.playGame(null))
+    void hit_shouldFail_whenIdIsNull() {
+        when(gameHitProcessor.processHit(null))
+                .thenReturn(Mono.error(new GameNotFoundException("Game ID must not be null")));
+
+        StepVerifier.create(gameService.hit(null))
                 .expectError(GameNotFoundException.class)
                 .verify();
     }
 
     @Test
-    void playGame_shouldFail_whenGameNotFound() {
-        when(gameRepository.findById(1L)).thenReturn(Mono.empty());
+    void hit_shouldReturnProcessedResponse() {
+        Long gameId = 1L;
+        GameResponse mockResponse = mock(GameResponse.class);
 
-        StepVerifier.create(gameService.playGame(1L))
+        when(gameHitProcessor.processHit(gameId)).thenReturn(Mono.just(mockResponse));
+
+        StepVerifier.create(gameService.hit(gameId))
+                .expectNext(mockResponse)
+                .verifyComplete();
+    }
+
+
+    @Test
+    void stand_shouldFail_whenIdIsNull() {
+        when(gameStandProcessor.processStand(null))
+                .thenReturn(Mono.error(new GameNotFoundException("Game ID must not be null")));
+
+        StepVerifier.create(gameService.stand(null))
                 .expectError(GameNotFoundException.class)
                 .verify();
     }
 
     @Test
-    void playGame_shouldSimulateGameAndReturnUpdatedGameResponse() {
-        // Setup game en progreso
-        game.setStatus(GameStatus.IN_PROGRESS);
-        game.setDeckJson("[]");
+    void stand_shouldReturnProcessedResponse() {
+        Long gameId = 1L;
+        GameResponse mockResponse = mock(GameResponse.class);
 
-        List<Card> deck = List.of(
-                new Card(CardSuit.HEARTS, CardValue.FIVE),
-                new Card(CardSuit.SPADES, CardValue.SIX),
-                new Card(CardSuit.CLUBS, CardValue.THREE),
-                new Card(CardSuit.DIAMONDS, CardValue.TWO)
-        );
+        when(gameStandProcessor.processStand(gameId)).thenReturn(Mono.just(mockResponse));
 
-        TurnResult playerTurn = new TurnResult(18, List.of(deck.get(0), deck.get(1)));
-        TurnResult dealerTurn = new TurnResult(16, List.of(deck.get(2), deck.get(3)));
-
-        // Simulación de ganador
-        GameStatus result = GameStatus.FINISHED_PLAYER_WON;
-        String updatedDeckJson = "[{\"suit\":\"SPADES\",\"value\":\"TEN\"}]";
-
-        // Simular lógica de repositorios y servicios
-        when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(deck));
-        when(blackjackEngine.simulateTurn(deck)).thenReturn(playerTurn).thenReturn(dealerTurn);
-        when(blackjackEngine.determineWinner(18, 16)).thenReturn(result);
-        when(deckManager.serializeDeck(deck)).thenReturn(updatedDeckJson);
-        when(gameRepository.save(any(Games.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(playerRepository.findById("playerId")).thenReturn(Mono.just(player));
-        when(playerRepository.save(any(Player.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(gameMapper.toResponse(any(Games.class), anyList(), anyList()))
-                .thenReturn(new GameResponse(
-                        1L,
-                        "playerId",
-                        LocalDateTime.now(),
-                        result,
-                        playerTurn.score(),
-                        dealerTurn.score(),
-                        List.of(),  // mock playerCards
-                        List.of()   // mock dealerCards
-                ));
-
-        StepVerifier.create(gameService.playGame(1L))
-                .expectNextMatches(response ->
-                        response.status() == result &&
-                                response.playerScore() == 18 &&
-                                response.dealerScore() == 16
-                )
+        StepVerifier.create(gameService.stand(gameId))
+                .expectNext(mockResponse)
                 .verifyComplete();
-
-        // Verifica que el jugador fue actualizado correctamente
-        verify(playerRepository).save(argThat(p ->
-                p.getGamesPlayed() == 11 &&
-                        p.getGamesWon() == 6 &&
-                        p.getTotalScore() == 118 &&
-                        p.getName().equals("John")
-        ));
-    }
-    @Test
-    void playGame_shouldReturnGameWithoutPlaying_whenStatusIsNotInProgress() {
-        game.setStatus(GameStatus.FINISHED_PLAYER_WON); // Juego ya terminado
-        game.setDeckJson("[]");
-
-        when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(List.of()));
-        when(deckManager.splitDeck(anyList())).thenReturn(Tuples.of(List.of(), List.of()));
-        when(gameMapper.toResponse(eq(game), anyList(), anyList()))
-                .thenReturn(new GameResponse(
-                        1L, "playerId", LocalDateTime.now(),
-                        GameStatus.FINISHED_PLAYER_WON, 20, 18,
-                        List.of(), List.of()
-                ));
-
-        StepVerifier.create(gameService.playGame(1L))
-                .expectNextMatches(response -> response.status() == GameStatus.FINISHED_PLAYER_WON)
-                .verifyComplete();
-
-        verify(playerRepository, never()).save(any());
-    }
-    @Test
-    void playGame_shouldFail_whenDeckHasLessThan4Cards() {
-        game.setStatus(GameStatus.IN_PROGRESS);
-        game.setDeckJson("[]");
-
-        when(gameRepository.findById(1L)).thenReturn(Mono.just(game));
-        when(deckManager.parseDeckReactive(anyString())).thenReturn(Mono.just(List.of(
-                new Card(CardSuit.HEARTS, CardValue.TWO),
-                new Card(CardSuit.CLUBS, CardValue.FIVE) // Solo 2 cartas
-        )));
-
-        StepVerifier.create(gameService.playGame(1L))
-                .expectError(InsufficientCardsException.class)
-                .verify();
     }
 }
