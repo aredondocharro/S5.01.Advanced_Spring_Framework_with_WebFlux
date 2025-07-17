@@ -4,7 +4,6 @@ import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
 import cat.itacademy.blackjack.exception.InsufficientCardsException;
 import cat.itacademy.blackjack.exception.PlayerNotFoundException;
-import cat.itacademy.blackjack.mapper.CardMapper;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.mongo.PlayerRepository;
@@ -20,6 +19,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple2;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -50,6 +51,7 @@ public class GameServiceImpl implements GameService {
                     List<Card> deck = deckManager.generateShuffledDeck();
 
                     if (deck.size() < 4) {
+                        logger.error("Not enough cards to start a game");
                         return Mono.error(new InsufficientCardsException("Not enough cards in the deck to start a game"));
                     }
 
@@ -58,10 +60,18 @@ public class GameServiceImpl implements GameService {
 
                     Games game = gameFactory.createNewGame(player.getId(), playerCards, dealerCards, deck);
                     if (game == null) {
+                        logger.error("Game creation failed");
                         return Mono.error(new RuntimeException("Game creation failed"));
                     }
 
+                    game.setTurn(GameTurn.PLAYER_TURN);
+                    game.setPlayerScore(blackjackEngine.calculateScore(playerCards));
+                    game.setDealerScore(0); // se calcula en stand()
+                    game.setStatus(GameStatus.IN_PROGRESS);
+                    game.setCreatedAt(LocalDateTime.now());
+
                     return gameRepository.save(game)
+                            .doOnSuccess(saved -> logger.info("Game created with ID: {}", saved.getId()))
                             .map(savedGame -> {
                                 savedGame.setPlayerCards(playerCards);
                                 savedGame.setDealerCards(dealerCards);
@@ -69,6 +79,7 @@ public class GameServiceImpl implements GameService {
                             });
                 });
     }
+
 
     @Override
     public Mono<GameResponse> getGameById(Long gameId) {
@@ -115,8 +126,102 @@ public class GameServiceImpl implements GameService {
                 .flatMap(game -> gameRepository.delete(game)
                         .doOnSuccess(v -> logger.info("Game deleted: {}", gameId)));
     }
-
     @Override
+    public Mono<GameResponse> hit(Long gameId) {
+        if (gameId == null) {
+            return Mono.error(new GameNotFoundException("Game ID must not be null"));
+        }
+
+        return gameRepository.findById(gameId)
+                .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
+                .flatMap(game -> {
+                    if (game.getTurn() != GameTurn.PLAYER_TURN || game.getStatus() != GameStatus.IN_PROGRESS) {
+                        return Mono.error(new IllegalStateException("Game is not in player's turn"));
+                    }
+
+                    return deckManager.parseDeckReactive(game.getDeckJson())
+                            .flatMap(deck -> {
+                                if (deck.isEmpty()) {
+                                    return Mono.error(new InsufficientCardsException("No cards left in deck"));
+                                }
+
+                                Card newCard = deck.remove(0);
+                                List<Card> playerCards = game.getPlayerCards() != null
+                                        ? new ArrayList<>(game.getPlayerCards())
+                                        : new ArrayList<>();
+                                playerCards.add(newCard);
+
+                                int newScore = blackjackEngine.calculateScore(playerCards);
+
+                                game.setPlayerCards(playerCards);
+                                game.setPlayerScore(newScore);
+                                game.setDeckJson(deckManager.serializeDeck(deck));
+
+                                if (newScore > 21) {
+                                    game.setStatus(GameStatus.FINISHED_DEALER_WON);
+                                    game.setTurn(GameTurn.FINISHED);
+                                }
+
+                                return gameRepository.save(game)
+                                        .map(updated -> gameMapper.toResponse(updated, playerCards, game.getDealerCards()));
+                            });
+                });
+    }
+    @Override
+    public Mono<GameResponse> stand(Long gameId) {
+        if (gameId == null) {
+            logger.warn("Attempt to stand with null game ID");
+            return Mono.error(new GameNotFoundException("Game ID must not be null"));
+        }
+
+        logger.info("Player stands in game ID: {}", gameId);
+
+        return gameRepository.findById(gameId)
+                .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
+                .flatMap(game -> {
+                    if (game.getStatus() != GameStatus.IN_PROGRESS) {
+                        return Mono.error(new IllegalStateException("Game is already finished"));
+                    }
+
+                    return deckManager.parseDeckReactive(game.getDeckJson())
+                            .flatMap(deck -> {
+                                List<Card> playerCards = game.getPlayerCards(); // ya están en memoria
+                                TurnResult dealerTurn = blackjackEngine.simulateTurn(deck);
+
+                                int playerScore = blackjackEngine.calculateScore(playerCards);
+                                int dealerScore = dealerTurn.score();
+                                GameStatus result = blackjackEngine.determineWinner(playerScore, dealerScore);
+                                String updatedDeckJson = deckManager.serializeDeck(deck);
+
+                                // Actualizamos la partida
+                                game.setDealerCards(dealerTurn.cards());
+                                game.setDealerScore(dealerScore);
+                                game.setPlayerScore(playerScore);
+                                game.setDeckJson(updatedDeckJson);
+                                game.setStatus(result);
+
+                                return gameRepository.save(game)
+                                        .flatMap(updatedGame ->
+                                                playerRepository.findById(game.getPlayerId())
+                                                        .flatMap(player -> {
+                                                            player.setGamesPlayed(player.getGamesPlayed() + 1);
+
+                                                            if (result == GameStatus.FINISHED_PLAYER_WON) {
+                                                                player.setGamesWon(player.getGamesWon() + 1);
+                                                                player.setTotalScore(player.getTotalScore() + playerScore);
+                                                            }
+
+                                                            return playerRepository.save(player)
+                                                                    .thenReturn(gameMapper.toResponse(
+                                                                            updatedGame,
+                                                                            playerCards,
+                                                                            dealerTurn.cards()
+                                                                    ));
+                                                        }));
+                            });
+                });
+    }
+/*    @Override
     public Mono<GameResponse> playGame(Long gameId) {
         if (gameId == null) {
             logger.warn("Attempt to play game with null ID");
@@ -158,7 +263,6 @@ public class GameServiceImpl implements GameService {
                                                         .flatMap(player -> {
                                                             player.setGamesPlayed(player.getGamesPlayed() + 1);
 
-                                                            // Sumar puntos y victorias solo si gana el jugador
                                                             if (result == GameStatus.FINISHED_PLAYER_WON) {
                                                                 player.setGamesWon(player.getGamesWon() + 1);
                                                                 player.setTotalScore(player.getTotalScore() + updatedGame.getPlayerScore());
@@ -174,7 +278,7 @@ public class GameServiceImpl implements GameService {
                                         );
                             });
                 });
-    }
+    }*/
 
 }
 

@@ -20,20 +20,22 @@ public class Games {
     @Id
     private Long id;
 
-    @NotNull(message = "Player ID must not be null")
+    @NotNull
     private String playerId;
 
-    @NotNull(message = "Creation date must not be null")
+    @NotNull
     private LocalDateTime createdAt;
 
-    @NotNull(message = "Status must not be null")
+    @NotNull
     private GameStatus status;
 
-    private int playerScore;
+    @NotNull
+    private GameTurn turn;
 
+    private int playerScore;
     private int dealerScore;
 
-    @NotNull(message = "Deck JSON must not be null")
+    @NotNull
     private String deckJson;
 
     @Transient
