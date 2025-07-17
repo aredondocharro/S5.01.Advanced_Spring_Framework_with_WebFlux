@@ -2,7 +2,7 @@ package cat.itacademy.blackjack.service.logic;
 
 import cat.itacademy.blackjack.dto.GameResponse;
 import cat.itacademy.blackjack.exception.GameNotFoundException;
-import cat.itacademy.blackjack.exception.InsufficientCardsException;
+import cat.itacademy.blackjack.exception.InvalidGameStateException;
 import cat.itacademy.blackjack.mapper.GameMapper;
 import cat.itacademy.blackjack.model.*;
 import cat.itacademy.blackjack.repository.sql.GameRepository;
@@ -33,7 +33,7 @@ public class GameStandProcessor {
                 .switchIfEmpty(Mono.error(new GameNotFoundException(gameId)))
                 .flatMap(game -> {
                     if (game.getTurn() != GameTurn.PLAYER_TURN || game.getStatus() != GameStatus.IN_PROGRESS) {
-                        return Mono.error(new IllegalStateException("Game is not in player's turn"));
+                        return Mono.error(new InvalidGameStateException("Game is not in player's turn"));
                     }
 
                     return Mono.zip(

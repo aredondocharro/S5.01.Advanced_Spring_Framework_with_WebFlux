@@ -15,115 +15,114 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.UnsupportedMediaTypeStatusException;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Maneja de forma global las excepciones lanzadas por la API,
- * devolviendo respuestas HTTP con formato consistente y mensajes claros.
- */
 @RestControllerAdvice
 @Order(1)
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private ErrorResponse buildErrorResponse(HttpStatus status, String error, String message, String path) {
+        return new ErrorResponse(
+                LocalDateTime.now(),
+                status.value(),
+                error,
+                message,
+                path
+        );
+    }
 
     @ExceptionHandler({PlayerNotFoundException.class, GameNotFoundException.class})
-    public ResponseEntity<Object> handleNotFound(RuntimeException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), exchange);
+    public ResponseEntity<ErrorResponse> handleNotFound(RuntimeException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
     }
-
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Object> handleInvalidJson(HttpMessageNotReadableException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Malformed JSON or invalid request body", exchange);
+    public ResponseEntity<ErrorResponse> handleInvalidJson(HttpMessageNotReadableException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST, "Malformed JSON", "Malformed JSON or invalid request body", exchange.getRequest().getPath().value())
+        );
     }
-
 
     @ExceptionHandler(UnsupportedMediaTypeStatusException.class)
-    public ResponseEntity<Object> handleUnsupportedMediaType(UnsupportedMediaTypeStatusException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type", "Unsupported Content-Type: " + ex.getMessage(), exchange);
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(UnsupportedMediaTypeStatusException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(
+                buildErrorResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
     }
 
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Object> handleValidationErrors(MethodArgumentNotValidException ex, ServerWebExchange exchange) {
-        List<Map<String, String>> errors = ex.getBindingResult()
+    public ResponseEntity<ValidationErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, ServerWebExchange exchange) {
+        List<FieldError> fieldErrors = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
-                .map(error -> {
-                    Map<String, String> err = new HashMap<>();
-                    err.put("field", error.getField());
-                    err.put("message", error.getDefaultMessage() != null ? error.getDefaultMessage() : "Validation error");
-                    return err;
-                })
+                .map(err -> new FieldError(err.getField(), err.getDefaultMessage()))
                 .collect(Collectors.toList());
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Validation Error");
-        body.put("messages", errors);
-        body.put("path", exchange.getRequest().getPath().value());
-
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+        ValidationErrorResponse response = new ValidationErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Validation Error",
+                "Invalid input data",
+                exchange.getRequest().getPath().value(),
+                fieldErrors
+        );
+        return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<Object> handleConstraintViolation(ConstraintViolationException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation Error", ex.getMessage(), exchange);
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex, ServerWebExchange exchange) {
+        return ResponseEntity.badRequest().body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation Error", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
     }
-
 
     @ExceptionHandler(InvalidPlayerNameException.class)
-    public ResponseEntity<Object> handleInvalidPlayerName(InvalidPlayerNameException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid player name", ex.getMessage(), exchange);
+    public ResponseEntity<ErrorResponse> handleInvalidPlayerName(InvalidPlayerNameException ex, ServerWebExchange exchange) {
+        return ResponseEntity.badRequest().body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid player name", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
     }
-
 
     @ExceptionHandler(InsufficientCardsException.class)
-    public ResponseEntity<Object> handleInsufficientCards(InsufficientCardsException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient Cards", ex.getMessage(), exchange);
+    public ResponseEntity<ErrorResponse> handleInsufficientCards(InsufficientCardsException ex, ServerWebExchange exchange) {
+        return ResponseEntity.badRequest().body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST, "Insufficient Cards", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
     }
-
 
     @ExceptionHandler(DuplicateKeyException.class)
-    public ResponseEntity<Object> handleDuplicateKey(DuplicateKeyException ex, ServerWebExchange exchange) {
-        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", "A player with that name already exists.", exchange);
+    public ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                buildErrorResponse(HttpStatus.CONFLICT, "Conflict", "A player with that name already exists.", exchange.getRequest().getPath().value())
+        );
     }
 
+    @ExceptionHandler(PlayerAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handlePlayerAlreadyExists(PlayerAlreadyExistsException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
+    }
+
+    @ExceptionHandler(InvalidGameStateException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidGameState(InvalidGameStateException ex, ServerWebExchange exchange) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid Game State", ex.getMessage(), exchange.getRequest().getPath().value())
+        );
+    }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleAllExceptions(Exception ex, ServerWebExchange exchange) {
+    public ResponseEntity<ErrorResponse> handleAllExceptions(Exception ex, ServerWebExchange exchange) {
         logger.error("Unexpected error occurred", ex);
-        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", exchange);
-    }
-    @ExceptionHandler(PlayerAlreadyExistsException.class)
-    public ResponseEntity<ErrorResponse> handlePlayerAlreadyExists(PlayerAlreadyExistsException ex) {
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                HttpStatus.CONFLICT.value(),
-                ex.getMessage()
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", exchange.getRequest().getPath().value())
         );
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
-    @ExceptionHandler(InvalidGameStateException.class)
-    public ResponseEntity<String> handleInvalidGameState(InvalidGameStateException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
-    }
-
-    private ResponseEntity<Object> buildErrorResponse(HttpStatus status, String errorTitle, String message, ServerWebExchange exchange) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("timestamp", LocalDateTime.now());
-        error.put("status", status.value());
-        error.put("error", errorTitle);
-        error.put("message", message);
-        error.put("path", exchange.getRequest().getPath().value());
-        return new ResponseEntity<>(error, status);
-    }
-
 }
+
 

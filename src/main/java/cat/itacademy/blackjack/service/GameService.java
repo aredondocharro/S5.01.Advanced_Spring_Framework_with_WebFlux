@@ -6,7 +6,6 @@ import reactor.core.publisher.Mono;
 
 public interface GameService {
     Mono<GameResponse> createGame(String playerName);
-   // Mono<GameResponse> playGame(Long gameId);
    Mono<GameResponse> hit(Long gameId);
     Mono<GameResponse> stand(Long gameId);
     Mono<GameResponse> getGameById(Long gameId);

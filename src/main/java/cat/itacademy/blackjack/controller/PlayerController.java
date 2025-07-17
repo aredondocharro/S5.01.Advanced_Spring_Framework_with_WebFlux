@@ -45,7 +45,7 @@ public class PlayerController {
                 .map(player -> ResponseEntity.status(HttpStatus.CREATED).body(player));
     }
 
-    @GetMapping("/name/{name}")
+    @GetMapping("/find/{name}")
     @Operation(
             summary = "Find player by name",
             description = "Retrieves a player by their name"
@@ -60,6 +60,19 @@ public class PlayerController {
         return playerService.findByName(name)
                 .map(ResponseEntity::ok);
     }
+    @GetMapping("/find/{id}")
+    @Operation(summary = "Find player by ID", description = "Retrieves a player by their MongoDB ID")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Player found"),
+            @ApiResponse(responseCode = "404", description = "Player not found")
+    })
+    public Mono<ResponseEntity<PlayerResponse>> findById(
+            @Parameter(description = "MongoDB ID of the player", example = "64f1ad1234567890")
+            @PathVariable String id
+    ) {
+        return playerService.findById(id)
+                .map(ResponseEntity::ok);
+    }
 
     @GetMapping("/all")
     @Operation(
@@ -70,7 +83,7 @@ public class PlayerController {
         return playerService.findAll();
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{id}")
     @Operation(
             summary = "Delete player by ID",
             description = "Deletes a player based on their ID"

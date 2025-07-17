@@ -48,15 +48,7 @@ public class GameController {
         return gameService.getAllGames();
     }
 
-/*    @PostMapping("/{id}/play")
-    @Operation(
-            summary = "Play a round of Blackjack",
-            description = "Simulates a round of Blackjack for the given game ID. Returns the result, scores, and cards played."
-    )
-    public Mono<ResponseEntity<GameResponse>> playGame(@PathVariable("id") Long gameId) {
-        return gameService.playGame(gameId)
-                .map(ResponseEntity::ok);
-    }*/
+
 @PostMapping("/{id}/hit")
 @Operation(summary = "Hit", description = "Plays a player turn.")
 public Mono<ResponseEntity<GameResponse>> hit(@PathVariable Long id) {
@@ -65,7 +57,7 @@ public Mono<ResponseEntity<GameResponse>> hit(@PathVariable Long id) {
 }
 
     @PostMapping("/{id}/stand")
-    @Operation(summary = "Stand", description = "Player stands and the dealer plays the turn.")
+    @Operation(summary = "Stand", description = "Player stands and the dealer plays the  turn.")
     public Mono<ResponseEntity<GameResponse>> stand(@PathVariable Long id) {
         return gameService.stand(id)
                 .map(ResponseEntity::ok);
