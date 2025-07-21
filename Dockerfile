@@ -2,7 +2,7 @@
 FROM eclipse-temurin:21-jdk
 
 # Optional: metadata
-LABEL maintainer="your_email@example.com"
+LABEL maintainer="alejandro.redondo.charro@gmail.com"
 
 # Set working directory inside the container
 WORKDIR /app

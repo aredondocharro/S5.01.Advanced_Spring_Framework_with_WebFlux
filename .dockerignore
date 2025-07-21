@@ -1,5 +1,6 @@
 # Maven build directory
-target/
+target/*
+!target/blackjack-api-0.0.1-SNAPSHOT.jar
 
 # IntelliJ IDEA
 .idea/

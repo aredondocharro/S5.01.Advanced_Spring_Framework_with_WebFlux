@@ -4,20 +4,18 @@ server:
 spring:
   data:
     mongodb:
-      host: localhost
+      host: mongo_blackjack
       port: 27017
       database: blackjack
 
   r2dbc:
-    url: r2dbc:mysql://localhost:3306/blackjack
+    url: r2dbc:mysql://mysql_blackjack:3306/blackjack
     username: root
     password: root
 
 springdoc:
-  # swagger-ui:
-   # path: /swagger-ui.html
-   api-docs:
-     path: /v3/api-docs
+  api-docs:
+    path: /v3/api-docs
 
 logging:
   level:

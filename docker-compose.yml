@@ -1,19 +1,40 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  mysql:
+  mongo_blackjack:
+    image: mongo:6
+    container_name: mongo_blackjack
+    ports:
+      - "27018:27017"
+    networks:
+      - blackjack-net
+
+  mysql_blackjack:
     image: mysql:8
     container_name: mysql_blackjack
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: blackjack
     ports:
-      - "3306:3306"
+      - "3307:3306"
+    volumes:
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - blackjack-net
 
-  mongodb:
-    image: mongo:6
-    container_name: mongo_blackjack
-    restart: always
+  blackjack-api:
+    image: blackjack-api:latest
+    container_name: blackjack-api
+    build:
+      context: .
     ports:
-      - "27017:27017"
+      - "8081:8080"
+    depends_on:
+      - mongo_blackjack
+      - mysql_blackjack
+    networks:
+      - blackjack-net
+
+networks:
+  blackjack-net:
+    driver: bridge
