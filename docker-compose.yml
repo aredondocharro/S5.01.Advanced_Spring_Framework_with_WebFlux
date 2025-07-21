@@ -5,7 +5,7 @@ services:
     image: mongo:6
     container_name: mongo_blackjack
     ports:
-      - "27018:27017"
+      - "27017:27017"
     networks:
       - blackjack-net
 
@@ -16,9 +16,16 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: blackjack
     ports:
-      - "3307:3306"
+      - "3306:3306"
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: always
     networks:
       - blackjack-net
 
@@ -28,10 +35,12 @@ services:
     build:
       context: .
     ports:
-      - "8081:8080"
+      - "8080:8080"
     depends_on:
-      - mongo_blackjack
-      - mysql_blackjack
+      mysql_blackjack:
+        condition: service_healthy
+      mongo_blackjack:
+        condition: service_started
     networks:
       - blackjack-net
 

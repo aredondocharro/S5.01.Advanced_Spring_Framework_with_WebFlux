@@ -4,12 +4,12 @@ server:
 spring:
   data:
     mongodb:
-      host: mongo_blackjack
+      host: mongo_blackjack # Usamos el nombre del servicio
       port: 27017
       database: blackjack
 
   r2dbc:
-    url: r2dbc:mysql://mysql_blackjack:3306/blackjack
+    url: r2dbc:mysql://mysql_blackjack:3306/blackjack # Usamos el nombre del servicio
     username: root
     password: root
 
@@ -20,3 +20,6 @@ springdoc:
 logging:
   level:
     org.springdoc: DEBUG
+    io.r2dbc: DEBUG
+    org.springframework.data.r2dbc: DEBUG
+    reactor.netty: DEBUG
