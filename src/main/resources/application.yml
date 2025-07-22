@@ -4,14 +4,11 @@ server:
 spring:
   data:
     mongodb:
-      host: mongo_blackjack # Usamos el nombre del servicio
-      port: 27017
-      database: blackjack
-
+      uri: ${SPRING_DATA_MONGODB_URI}
   r2dbc:
-    url: r2dbc:mysql://mysql_blackjack:3306/blackjack # Usamos el nombre del servicio
-    username: root
-    password: root
+    url: ${SPRING_R2DBC_URL}
+    username: ${SPRING_R2DBC_USERNAME}
+    password: ${SPRING_R2DBC_PASSWORD}
 
 springdoc:
   api-docs:

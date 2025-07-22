@@ -9,25 +9,28 @@ services:
     networks:
       - blackjack-net
 
-  mysql_blackjack:
-    image: mysql:8
-    container_name: mysql_blackjack
+  postgres_blackjack:
+    image: postgres:16
+    container_name: postgres_blackjack
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: blackjack
+      POSTGRES_DB: blackjack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "3306:3306"
-    volumes:
-      - ./mysql-init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
-    restart: always
+      - "5432:5432"
     networks:
       - blackjack-net
+    volumes:
+      - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+    command: ["postgres", "-c", "listen_addresses=*"]
+
 
   blackjack-api:
     image: blackjack-api:latest
@@ -36,8 +39,13 @@ services:
       context: .
     ports:
       - "8080:8080"
+    environment:
+      - SPRING_R2DBC_URL=r2dbc:postgresql://postgres_blackjack:5432/blackjack
+      - SPRING_R2DBC_USERNAME=postgres
+      - SPRING_R2DBC_PASSWORD=postgres
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo_blackjack:27017/blackjack
     depends_on:
-      mysql_blackjack:
+      postgres_blackjack:
         condition: service_healthy
       mongo_blackjack:
         condition: service_started
@@ -47,3 +55,7 @@ services:
 networks:
   blackjack-net:
     driver: bridge
+    name: blackjack-net
+
+volumes:
+  pgdata:

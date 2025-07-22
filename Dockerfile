@@ -20,10 +20,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/*.jar app.jar
-COPY wait-for-mysql.sh ./wait-for-mysql.sh
-RUN chmod +x ./wait-for-mysql.sh
+COPY wait-for-postgres.sh ./wait-for-postgres.sh
+RUN chmod +x ./wait-for-postgres.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["./wait-for-mysql.sh"]
+ENTRYPOINT ["./wait-for-postgres.sh"]
 

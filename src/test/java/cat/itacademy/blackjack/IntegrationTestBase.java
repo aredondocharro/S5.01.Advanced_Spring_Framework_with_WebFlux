@@ -1,34 +1,40 @@
 package cat.itacademy.blackjack;
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
+@Testcontainers
+@ExtendWith(org.springframework.test.context.junit.jupiter.SpringExtension.class)
 public abstract class IntegrationTestBase {
 
-    static MongoDBContainer mongoDB = new MongoDBContainer("mongo:7.0.5");
-    static MySQLContainer<?> mySQL = new MySQLContainer<>("mysql:8.3.0")
+    @Container
+    static MongoDBContainer mongoDB = new MongoDBContainer("mongo:7.0.5")
+            .withExposedPorts(27017);
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
             .withDatabaseName("blackjack")
             .withUsername("test")
-            .withPassword("test");
-
-    @BeforeAll
-    static void startContainers() {
-        mongoDB.start();
-        mySQL.start();
-    }
+            .withPassword("test")
+            .withInitScript("init-test.sql");
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
         // MongoDB
         registry.add("spring.data.mongodb.uri", mongoDB::getReplicaSetUrl);
 
-        // MySQL R2DBC
+        // PostgreSQL R2DBC
         registry.add("spring.r2dbc.url", () ->
-                "r2dbc:mysql://" + mySQL.getHost() + ":" + mySQL.getMappedPort(3306) + "/" + mySQL.getDatabaseName());
-        registry.add("spring.r2dbc.username", mySQL::getUsername);
-        registry.add("spring.r2dbc.password", mySQL::getPassword);
+                String.format("r2dbc:postgresql://%s:%d/%s",
+                        postgres.getHost(),
+                        postgres.getMappedPort(5432),
+                        postgres.getDatabaseName()));
+        registry.add("spring.r2dbc.username", postgres::getUsername);
+        registry.add("spring.r2dbc.password", postgres::getPassword);
     }
 }
