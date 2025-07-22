@@ -1,4 +1,3 @@
-
 FROM maven:3.9.6-eclipse-temurin-21 AS builder
 
 WORKDIR /app
@@ -8,7 +7,6 @@ RUN mvn dependency:go-offline -B
 
 COPY src ./src
 RUN mvn clean package -DskipTests
-
 
 FROM eclipse-temurin:21-jdk
 
@@ -23,4 +21,4 @@ RUN chmod +x ./wait-for-postgres.sh
 EXPOSE 8080
 
 ENTRYPOINT ["./wait-for-postgres.sh"]
-
+CMD ["java", "-jar", "app.jar"]

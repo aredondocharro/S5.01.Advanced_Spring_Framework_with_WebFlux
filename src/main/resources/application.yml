@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   application:
@@ -19,14 +19,7 @@ spring:
       validation-query-timeout: 5s
       max-acquire-time: 10s
       max-create-connection-time: 10s
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-
-logging:
-  level:
-    org.springdoc: DEBUG
-    io.r2dbc: DEBUG
-    org.springframework.data.r2dbc: DEBUG
-    reactor.netty: DEBUG
+    properties:
+      ssl: true
+      sslMode: verify-ca
+      sslRootCert: /etc/ssl/certs/ca-certificates.crt
