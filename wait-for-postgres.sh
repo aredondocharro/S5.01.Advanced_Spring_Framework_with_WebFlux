@@ -1,15 +1,18 @@
 #!/bin/bash
-# Usa DB_HOST como variable de entorno, con un valor por defecto
-host="${DB_HOST:-dpg-d1vtrtili9vc73fscvug-a}" # Hostname interno de Render
-port="5432"
-# Opcional: Usa SPRING_R2DBC_URL para extraer el host si está disponible
+
+# Intenta extraer el host desde la URL R2DBC (si existe)
 if [ -n "$SPRING_R2DBC_URL" ]; then
-    host=$(echo "$SPRING_R2DBC_URL" | sed -n 's/r2dbc:postgresql:\/\/\([^:]*\):.*/\1/p')
+    host=$(echo "$SPRING_R2DBC_URL" | sed -n 's/r2dbc:postgresql:\/\/\([^:/]*\).*/\1/p')
+else
+    host="${DB_HOST:-localhost}"
 fi
+
+port="5432"
+
+echo "Esperando conexión a PostgreSQL en $host:$port..."
 while ! nc -zv "$host" "$port"; do
-    echo "Waiting for PostgreSQL on $host:$port..."
+    echo "Esperando a PostgreSQL..."
     sleep 1
 done
-echo "PostgreSQL is up - continuing..."
-# Ejecuta el comando pasado como argumento (por ejemplo, java -jar)
+echo "PostgreSQL disponible, arrancando app"
 exec "$@"
