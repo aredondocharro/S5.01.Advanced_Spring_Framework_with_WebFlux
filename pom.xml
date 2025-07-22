@@ -47,6 +47,10 @@
             <artifactId>r2dbc-postgresql</artifactId>
             <version>1.0.7.RELEASE</version>
         </dependency>
+        <dependency>
+            <groupId>io.r2dbc</groupId>
+            <artifactId>r2dbc-pool</artifactId>
+        </dependency>
         <!-- Driver JDBC para Testcontainers -->
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -140,6 +144,11 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <layers>
+                        <enabled>true</enabled>
+                    </layers>
+                </configuration>
             </plugin>
 
             <plugin>

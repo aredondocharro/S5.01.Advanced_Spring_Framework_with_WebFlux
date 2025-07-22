@@ -8,6 +8,8 @@ services:
       - "27017:27017"
     networks:
       - blackjack-net
+    volumes:
+      - mongo_data:/data/db
 
   postgres_blackjack:
     image: postgres:16
@@ -19,15 +21,17 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - blackjack-net
+      blackjack-net:
+        ipv4_address: 172.18.0.10
     volumes:
       - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d blackjack"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 45s
     restart: always
     command: ["postgres", "-c", "listen_addresses=*"]
 
@@ -40,7 +44,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_R2DBC_URL=r2dbc:postgresql://postgres_blackjack:5432/blackjack
+      - SPRING_R2DBC_URL=r2dbc:postgresql://172.18.0.10:5432/blackjack
       - SPRING_R2DBC_USERNAME=postgres
       - SPRING_R2DBC_PASSWORD=postgres
       - SPRING_DATA_MONGODB_URI=mongodb://mongo_blackjack:27017/blackjack
@@ -51,11 +55,17 @@ services:
         condition: service_started
     networks:
       - blackjack-net
+    hostname: blackjack-api-host
+    command: ["sh", "-c", "sleep 10 && java -jar blackjack-api-0.0.1-SNAPSHOT.jar"]
 
 networks:
   blackjack-net:
     driver: bridge
     name: blackjack-net
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
 
 volumes:
-  pgdata:
+  pg_data:
+  mongo_data:

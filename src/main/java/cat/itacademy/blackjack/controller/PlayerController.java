@@ -1,5 +1,6 @@
 package cat.itacademy.blackjack.controller;
 
+import cat.itacademy.blackjack.dto.PlayerNameUpdateRequest;
 import cat.itacademy.blackjack.dto.PlayerRankingResponse;
 import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
@@ -60,5 +61,15 @@ public class PlayerController {
     @Operation(summary = "Player ranking", description = "Returns players ranked by win rate and score")
     public Flux<PlayerRankingResponse> getRanking() {
         return playerService.getRanking();
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update player name", description = "Updates the name of an existing player by their MongoDB ID")
+    public Mono<ResponseEntity<PlayerResponse>> updatePlayerName(
+            @PathVariable String id,
+            @Valid @RequestBody PlayerNameUpdateRequest request) {
+        return playerService.updatePlayerName(id, request.newName())
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 }

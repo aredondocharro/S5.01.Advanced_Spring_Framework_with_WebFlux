@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  application:
+    name: blackjack-api
   data:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI}
@@ -9,6 +11,14 @@ spring:
     url: ${SPRING_R2DBC_URL}
     username: ${SPRING_R2DBC_USERNAME}
     password: ${SPRING_R2DBC_PASSWORD}
+    pool:
+      initial-size: 0
+      max-size: 10
+      max-idle-time: 30m
+      validation-query: "SELECT 1"
+      validation-query-timeout: 5s
+      max-acquire-time: 10s
+      max-create-connection-time: 10s
 
 springdoc:
   api-docs:
