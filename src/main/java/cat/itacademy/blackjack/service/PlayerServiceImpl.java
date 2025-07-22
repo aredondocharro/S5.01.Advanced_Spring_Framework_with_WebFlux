@@ -107,6 +107,29 @@ public class PlayerServiceImpl implements PlayerService {
                 .flatMap(playerRepository::delete)
                 .doOnSuccess(unused -> logger.info("Player deleted with ID: {}", id));
     }
+
+    @Override
+    public Mono<PlayerResponse> updatePlayerName(String id, String newName) {
+        if (id == null || id.trim().isEmpty()) {
+            logger.warn("Attempted to update player with null or empty ID");
+            return Mono.error(new PlayerNotFoundException("Player ID must not be null or empty."));
+        }
+        if (newName == null || newName.trim().isEmpty()) {
+            logger.warn("Attempted to update player with null or empty new name");
+            return Mono.error(new InvalidPlayerNameException("New player name cannot be null or empty"));
+        }
+        logger.info("Updating name for player ID: {} to {}", id, newName);
+        return playerRepository.findByName(newName)
+                .flatMap(existing -> Mono.<Player>error(new PlayerAlreadyExistsException("Player with name '" + newName + "' already exists")))
+                .switchIfEmpty(Mono.defer(() -> playerRepository.findById(id)))
+                .switchIfEmpty(Mono.error(PlayerNotFoundException.forMissingId(id)))
+                .flatMap(player -> {
+                    player.setName(newName);
+                    return playerRepository.save(player)
+                            .map(playerMapper::toResponse)
+                            .doOnSuccess(updated -> logger.info("Player name updated for ID: {}", id));
+                });
+    }
 }
 
 

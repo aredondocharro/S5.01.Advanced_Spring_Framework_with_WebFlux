@@ -13,4 +13,5 @@ public interface PlayerService {
     Mono<Void> deleteById(String id);
     Flux<PlayerResponse> findAll();
     Flux<PlayerRankingResponse> getRanking();
+    Mono<PlayerResponse> updatePlayerName(String id, String newName);
 }

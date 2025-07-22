@@ -1,0 +1,18 @@
+spring:
+  r2dbc:
+    url: r2dbc:h2:mem:///blackjack?options=DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    initialization-mode: always
+  sql:
+    init:
+      schema-locations: classpath:init-test.sql
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/blackjack
+logging:
+  level:
+    org.springdoc: DEBUG
+    io.r2dbc: DEBUG
+    org.springframework.data.r2dbc: DEBUG
+    reactor.netty: DEBUG

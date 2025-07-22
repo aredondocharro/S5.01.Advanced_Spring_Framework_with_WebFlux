@@ -2,7 +2,10 @@ package cat.itacademy.blackjack.controller;
 
 import cat.itacademy.blackjack.dto.GameRequest;
 import cat.itacademy.blackjack.dto.GameResponse;
+import cat.itacademy.blackjack.dto.PlayerNameUpdateRequest;
+import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.service.GameService;
+import cat.itacademy.blackjack.service.PlayerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -20,6 +23,7 @@ import reactor.core.publisher.Flux;
 public class GameController {
 
     private final GameService gameService;
+    private final PlayerService playerService;
 
     @PostMapping("/new")
     @Operation(summary = "Create new game", description = "Creates a new game for a given player.")
@@ -61,6 +65,15 @@ public Mono<ResponseEntity<GameResponse>> hit(@PathVariable Long id) {
     public Mono<ResponseEntity<GameResponse>> stand(@PathVariable Long id) {
         return gameService.stand(id)
                 .map(ResponseEntity::ok);
+    }
+    @PutMapping("/{id}")
+    @Operation(summary = "Update player name", description = "Updates the name of an existing player by their MongoDB ID")
+    public Mono<ResponseEntity<PlayerResponse>> updatePlayerName(
+            @PathVariable String id,
+            @Valid @RequestBody PlayerNameUpdateRequest request) {
+        return playerService.updatePlayerName(id, request.newName())
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 }
 

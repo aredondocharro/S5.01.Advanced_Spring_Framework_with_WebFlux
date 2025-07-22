@@ -13,7 +13,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 
-
 public class Player {
     @Id
     private String id;
