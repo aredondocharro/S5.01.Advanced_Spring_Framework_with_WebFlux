@@ -178,5 +178,70 @@ class PlayerServiceImplTest {
 
         verify(playerRepository).delete(samplePlayer);
     }
+    @Test
+    void updatePlayerName_ShouldSucceed_WhenPlayerExistsAndNameIsNew() {
+        Player updatedPlayer = new Player("id123", "updatedPlayer", 100, 10, 5, samplePlayer.getCreatedAt());
+        PlayerResponse updatedResponse = new PlayerResponse("id123", "updatedPlayer", 100, samplePlayer.getCreatedAt());
+
+        when(playerRepository.findByName("updatedPlayer")).thenReturn(Mono.empty());
+        when(playerRepository.findById("id123")).thenReturn(Mono.just(samplePlayer));
+        when(playerRepository.save(any(Player.class))).thenReturn(Mono.just(updatedPlayer));
+        when(playerMapper.toResponse(updatedPlayer)).thenReturn(updatedResponse);
+
+        StepVerifier.create(playerService.updatePlayerName("id123", "updatedPlayer"))
+                .expectNextMatches(response -> response.id().equals("id123") && response.name().equals("updatedPlayer"))
+                .verifyComplete();
+
+        verify(playerRepository).save(argThat(player -> player.getName().equals("updatedPlayer")));
+    }
+
+    @Test
+    void updatePlayerName_ShouldFail_WhenIdIsNullOrEmpty() {
+        StepVerifier.create(playerService.updatePlayerName(null, "updatedPlayer"))
+                .expectErrorMatches(throwable -> throwable instanceof PlayerNotFoundException &&
+                        throwable.getMessage().equals("Player ID must not be null or empty."))
+                .verify();
+
+        StepVerifier.create(playerService.updatePlayerName("   ", "updatedPlayer"))
+                .expectErrorMatches(throwable -> throwable instanceof PlayerNotFoundException &&
+                        throwable.getMessage().equals("Player ID must not be null or empty."))
+                .verify();
+    }
+
+    @Test
+    void updatePlayerName_ShouldFail_WhenNameIsNullOrEmpty() {
+        StepVerifier.create(playerService.updatePlayerName("id123", null))
+                .expectErrorMatches(throwable -> throwable instanceof InvalidPlayerNameException &&
+                        throwable.getMessage().equals("New player name cannot be null or empty"))
+                .verify();
+
+        StepVerifier.create(playerService.updatePlayerName("id123", "   "))
+                .expectErrorMatches(throwable -> throwable instanceof InvalidPlayerNameException &&
+                        throwable.getMessage().equals("New player name cannot be null or empty"))
+                .verify();
+    }
+
+    @Test
+    void updatePlayerName_ShouldFail_WhenPlayerNotFound() {
+        when(playerRepository.findByName("updatedPlayer")).thenReturn(Mono.empty());
+        when(playerRepository.findById("id123")).thenReturn(Mono.empty());
+
+        StepVerifier.create(playerService.updatePlayerName("id123", "updatedPlayer"))
+                .expectErrorMatches(throwable -> throwable instanceof PlayerNotFoundException &&
+                        throwable.getMessage().equals("Player with id 'id123' not found."))
+                .verify();
+    }
+
+    @Test
+    void updatePlayerName_ShouldFail_WhenNameAlreadyExists() {
+        Player existingPlayer = new Player("anotherId", "updatedPlayer", 50, 5, 2, LocalDateTime.now());
+
+        when(playerRepository.findByName("updatedPlayer")).thenReturn(Mono.just(existingPlayer));
+
+        StepVerifier.create(playerService.updatePlayerName("id123", "updatedPlayer"))
+                .expectErrorMatches(throwable -> throwable instanceof PlayerAlreadyExistsException &&
+                        throwable.getMessage().equals("Player with name 'updatedPlayer' already exists"))
+                .verify();
+    }
 }
 
