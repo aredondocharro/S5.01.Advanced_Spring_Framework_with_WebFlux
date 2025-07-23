@@ -5,24 +5,17 @@ import cat.itacademy.blackjack.dto.PlayerRequest;
 import cat.itacademy.blackjack.dto.PlayerResponse;
 import cat.itacademy.blackjack.model.Player;
 import org.mapstruct.Mapper;
-
-
-import java.time.LocalDateTime;
+import org.mapstruct.Mapping;
 
 
 @Mapper(componentModel = "spring")
 public interface PlayerMapper {
 
-    default Player toEntity(PlayerRequest request) {
-        return Player.builder()
-                .name(request.name())
-                .gamesPlayed(0)
-                .gamesWon(0)
-                .totalScore(0)
-                .createdAt(LocalDateTime.now())
-                .build();
-    }
+    @Mapping(target = "gamesPlayed", constant = "0")
+    @Mapping(target = "gamesWon", constant = "0")
+    @Mapping(target = "totalScore", constant = "0")
+    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
+    Player toEntity(PlayerRequest request);
 
     PlayerResponse toResponse(Player player);
-
 }

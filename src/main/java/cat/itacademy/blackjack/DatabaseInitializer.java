@@ -32,8 +32,8 @@ public class DatabaseInitializer implements CommandLineRunner {
 
         databaseClient.sql(createTableSql)
                 .then()
-                .doOnSuccess(unused -> System.out.println("✅ Tabla 'games' creada o ya existente."))
-                .doOnError(error -> System.err.println("❌ Error creando tabla 'games': " + error.getMessage()))
+                .doOnSuccess(unused -> System.out.println("✅ Table 'games' created or already exist."))
+                .doOnError(error -> System.err.println("❌ Error creating 'games': " + error.getMessage()))
                 .subscribe();
     }
 }

@@ -12,14 +12,11 @@ import java.util.stream.Collectors;
 @Mapper(componentModel = "spring")
 public interface CardMapper {
 
-    default CardResponseDTO toDto(Card card) {
-        return new CardResponseDTO(card.getSuit().name(), card.getValue().name());
-    }
 
-    @Named("toDtoList")
-    default List<CardResponseDTO> toDtoList(List<Card> cards) {
-        return cards.stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        @Mapping(target = "suit", expression = "java(card.getSuit().name())")
+        @Mapping(target = "value", expression = "java(card.getValue().name())")
+        CardResponseDTO toDto(Card card);
+
+        @Named("toDtoList")
+        List<CardResponseDTO> toDtoList(List<Card> cards);
     }
-}

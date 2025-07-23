@@ -1,33 +1,22 @@
-# Maven build directory
-target/*
-!target/blackjack-api-0.0.1-SNAPSHOT.jar
-
-# IntelliJ IDEA
-.idea/
-*.iml
-
-# Eclipse
-.project
-.classpath
-.settings/
-
-# Logs
+# Maven
+target/
 *.log
 
-# MacOS
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Sistema
 .DS_Store
 
 # Git
 .git
 .gitignore
 
-# Docker itself
-Dockerfile
-.dockerignore
-docker-compose.yml
-
-# Env files
+# Variables de entorno y config local
 .env
+local.env
 
-# Markdown and docs
+# Docs
 *.md
