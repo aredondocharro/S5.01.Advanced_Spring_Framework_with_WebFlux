@@ -25,10 +25,10 @@ public abstract class IntegrationTestBase {
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        // MongoDB
+
         registry.add("spring.data.mongodb.uri", mongoDB::getReplicaSetUrl);
 
-        // PostgreSQL R2DBC
+
         registry.add("spring.r2dbc.url", () ->
                 String.format("r2dbc:postgresql://%s:%d/%s",
                         postgres.getHost(),

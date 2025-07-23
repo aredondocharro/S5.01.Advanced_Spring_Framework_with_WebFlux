@@ -35,9 +35,10 @@ public class GameRepositoryIT extends IntegrationTestBase {
                 .expectNextMatches(saved -> saved.getId() != null && saved.getPlayerId().equals("integrationTestPlayer"))
                 .verifyComplete();
 
-        // Opcional: Verifica que puedes recuperar el juego guardado
         StepVerifier.create(gameRepository.findByPlayerId("integrationTestPlayer"))
                 .expectNextMatches(found -> found.getId() != null && found.getPlayerId().equals("integrationTestPlayer"))
                 .verifyComplete();
     }
 }
+
+

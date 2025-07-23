@@ -22,9 +22,9 @@ services:
       - "5432:5432"
     networks:
       blackjack-net:
-        ipv4_address: 172.18.0.10
+        #ipv4_address: 172.18.0.10
     volumes:
-      - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
+     # - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
       - pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d blackjack"]

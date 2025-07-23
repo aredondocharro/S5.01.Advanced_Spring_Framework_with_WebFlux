@@ -61,3 +61,4 @@ class SwaggerIntegrationTest {
                 .expectHeader().contentType("application/json");
     }
 }
+
