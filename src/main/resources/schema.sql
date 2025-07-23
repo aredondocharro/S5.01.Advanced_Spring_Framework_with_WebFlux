@@ -10,5 +10,3 @@ CREATE TABLE IF NOT EXISTS games (
     player_cards_json TEXT NOT NULL,
     dealer_cards_json TEXT NOT NULL
 );
-
---this is for docker-compose configuration

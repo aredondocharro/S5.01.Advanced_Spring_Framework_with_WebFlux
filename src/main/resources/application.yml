@@ -1,5 +1,8 @@
 server:
   port: ${PORT:8080}
+  error:
+    whitelabel:
+      enabled: false
 
 spring:
   application:
@@ -23,3 +26,10 @@ spring:
       ssl: true
       sslMode: verify-ca
       sslRootCert: /etc/ssl/certs/ca-certificates.crt
+
+  mvc:
+    throw-exception-if-no-handler-found: true
+
+  web:
+    resources:
+      add-mappings: false

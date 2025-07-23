@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Intenta extraer el host desde la URL R2DBC (si existe)
 if [ -n "$SPRING_R2DBC_URL" ]; then
     host=$(echo "$SPRING_R2DBC_URL" | sed -n 's/r2dbc:postgresql:\/\/\([^:/]*\).*/\1/p')
+elif [ -n "$DB_HOST" ]; then
+    host="$DB_HOST"
 else
-    host="${DB_HOST:-localhost}"
+    host="localhost"
 fi
 
 port="5432"

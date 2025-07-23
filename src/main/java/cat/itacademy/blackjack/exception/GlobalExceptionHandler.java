@@ -11,12 +11,14 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.UnsupportedMediaTypeStatusException;
-import reactor.core.publisher.Mono;
+
 
 import java.time.LocalDateTime;
 import java.util.List;
+
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -132,6 +134,23 @@ public class GlobalExceptionHandler {
                 buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred", exchange.getRequest().getPath().value())
         );
     }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex, ServerWebExchange exchange) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        logger.warn("Handled ResponseStatusException - {}: {}", ex.getStatusCode(), ex.getReason());
+
+        return ResponseEntity.status(status).body(
+                buildErrorResponse(
+                        status,
+                        status.getReasonPhrase(),
+                        ex.getReason() != null ? ex.getReason() : "Unexpected error",
+                        exchange.getRequest().getPath().value()
+                )
+        );
+    }
+
+
 }
 
 
