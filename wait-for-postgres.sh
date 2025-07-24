@@ -10,10 +10,10 @@ fi
 
 port="5432"
 
-echo "Esperando conexión a PostgreSQL en $host:$port..."
+echo "Waiting for a PostgreSQL conection at $host:$port..."
 while ! nc -zv "$host" "$port"; do
-    echo "Esperando a PostgreSQL..."
+    echo "Waiting for PostgreSQL..."
     sleep 1
 done
-echo "PostgreSQL disponible, arrancando app"
+echo "PostgreSQL is able, running app"
 exec "$@"
