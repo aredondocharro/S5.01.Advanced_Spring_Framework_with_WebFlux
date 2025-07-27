@@ -51,7 +51,7 @@ To run and develop this project, the following technologies are required:
 ## 🏗 Architecture Overview
 
 The Blackjack API follows a layered architecture, ensuring clean separation of concerns:
-
+```plaintext
 S5.01.Advanced_Spring_Framework_with_WebFlux/
 ├── screenshots/
 ├── src/
@@ -83,6 +83,7 @@ S5.01.Advanced_Spring_Framework_with_WebFlux/
 .
 .
 .
+```
 
 ### 1. Controller Layer
 - **Location:** `cat.itacademy.blackjack.controller`
