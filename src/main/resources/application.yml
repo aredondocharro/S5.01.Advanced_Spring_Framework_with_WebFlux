@@ -22,10 +22,10 @@ spring:
       validation-query-timeout: 5s
       max-acquire-time: 10s
       max-create-connection-time: 10s
-    properties:
-      ssl: true
-      sslMode: verify-ca
-      sslRootCert: /etc/ssl/certs/ca-certificates.crt
+    #properties:
+      #ssl: true
+      #sslMode: verify-ca
+      #sslRootCert: /etc/ssl/certs/ca-certificates.crt
 
   mvc:
     throw-exception-if-no-handler-found: true
@@ -33,3 +33,5 @@ spring:
   web:
     resources:
       add-mappings: false
+
+
